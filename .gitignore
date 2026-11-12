@@ -1,0 +1,34 @@
+*
+!*/
+
+# Repository metadata
+!/.gitignore
+!/README.md
+!/leptosfmt.toml
+!/secretspec.toml
+!/LICENSE-MIT
+!/LICENSE-APACHE
+!/crates/*/LICENSE-MIT
+!/crates/*/LICENSE-APACHE
+!/crates/rstml-ssr-macros/README.md
+
+# Rust source and test fixtures
+!/Cargo.toml
+!/Cargo.lock
+!/crates/*/Cargo.toml
+!/crates/*/src/**/*.rs
+!/crates/*/tests/**/*.rs
+!/crates/rstml-ssr/tests/ui/*.stderr
+!/crates/rstml-ssr/tests/fixtures/README.md
+!/crates/rstml-ssr/tests/fixtures/browser-checks.js
+!/crates/rstml-ssr/tests/fixtures/matter-state.svg
+
+# Structural policies
+!/.ast-grep/sgconfig.yml
+!/.ast-grep/rules/*.yml
+!/.ast-grep/tests/*.yml
+!/.ast-grep/utils/*.yml
+
+# Nix
+!/flake.nix
+!/flake.lock

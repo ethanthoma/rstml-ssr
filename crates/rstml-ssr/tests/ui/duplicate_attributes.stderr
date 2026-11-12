@@ -1,0 +1,59 @@
+error: duplicate attribute `class`
+ --> tests/ui/duplicate_attributes.rs:5:40
+  |
+5 |     let _ = html! { <div class="alert" class={dynamic}/> };
+  |                                        ^^^^^
+
+error: first attribute defined here
+ --> tests/ui/duplicate_attributes.rs:5:26
+  |
+5 |     let _ = html! { <div class="alert" class={dynamic}/> };
+  |                          ^^^^^
+
+error: duplicate attribute `class`
+ --> tests/ui/duplicate_attributes.rs:6:40
+  |
+6 |     let _ = html! { <div CLASS="alert" class={dynamic}/> };
+  |                                        ^^^^^
+
+error: first attribute defined here
+ --> tests/ui/duplicate_attributes.rs:6:26
+  |
+6 |     let _ = html! { <div CLASS="alert" class={dynamic}/> };
+  |                          ^^^^^
+
+error: duplicate attribute `disabled`
+ --> tests/ui/duplicate_attributes.rs:7:45
+  |
+7 |     let _ = html! { <input disabled={false} disabled={true}/> };
+  |                                             ^^^^^^^^
+
+error: first attribute defined here
+ --> tests/ui/duplicate_attributes.rs:7:28
+  |
+7 |     let _ = html! { <input disabled={false} disabled={true}/> };
+  |                            ^^^^^^^^
+
+error: duplicate attribute `viewbox`
+ --> tests/ui/duplicate_attributes.rs:8:44
+  |
+8 |     let _ = html! { <svg viewBox="0 0 1 1" viewbox="0 0 2 2"/> };
+  |                                            ^^^^^^^
+
+error: first attribute defined here
+ --> tests/ui/duplicate_attributes.rs:8:26
+  |
+8 |     let _ = html! { <svg viewBox="0 0 1 1" viewbox="0 0 2 2"/> };
+  |                          ^^^^^^^
+
+error: duplicate attribute `data-on:click`
+ --> tests/ui/duplicate_attributes.rs:9:48
+  |
+9 |     let _ = html! { <div data-on:click="first" data-on:click="second"/> };
+  |                                                ^^^^^^^^^^^^^
+
+error: first attribute defined here
+ --> tests/ui/duplicate_attributes.rs:9:26
+  |
+9 |     let _ = html! { <div data-on:click="first" data-on:click="second"/> };
+  |                          ^^^^

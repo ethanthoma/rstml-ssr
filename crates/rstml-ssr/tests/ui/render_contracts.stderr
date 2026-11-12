@@ -1,0 +1,94 @@
+error[E0277]: the trait bound `Ipv4Addr: Render` is not satisfied
+ --> tests/ui/render_contracts.rs:4:24
+  |
+4 |     let _ = html! { <p>{std::net::Ipv4Addr::LOCALHOST}</p> };
+  |             -----------^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^------
+  |             |          |
+  |             |          the trait `Render` is not implemented for `Ipv4Addr`
+  |             required by a bound introduced by this call
+  |
+  = help: the following other types implement trait `Render`:
+            &T
+            ()
+            Fragment<F>
+            Markup
+            Option<T>
+            TrustedHtml<'_>
+            Vec<T>
+            [T]
+          and $N others
+
+error[E0277]: the trait bound `TrustedHtml<'_>: Attribute` is not satisfied
+ --> tests/ui/render_contracts.rs:5:30
+  |
+5 |     let _ = html! { <p title={TrustedHtml("bad")}/> };
+  |                              ^^^^^^^^^^^^^^^^^^^^ the trait `Attribute` is not implemented for `TrustedHtml<'_>`
+  |
+  = help: the following other types implement trait `Attribute`:
+            &T
+            Option<T>
+            bool
+            f32
+            f64
+            i128
+            i16
+            i32
+          and $N others
+note: required by a bound in `rstml_ssr::Output::attribute`
+ --> src/lib.rs
+  |
+  |     pub fn attribute(
+  |            --------- required by a bound in this associated function
+...
+  |         value: &(impl Attribute + ?Sized),
+  |                       ^^^^^^^^^ required by this bound in `Output::attribute`
+
+error[E0277]: the trait bound `Markup: Attribute` is not satisfied
+ --> tests/ui/render_contracts.rs:6:30
+  |
+6 |     let _ = html! { <p title={render(&"bad").unwrap()}/> };
+  |                              ^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Attribute` is not implemented for `Markup`
+  |
+  = help: the following other types implement trait `Attribute`:
+            &T
+            Option<T>
+            bool
+            f32
+            f64
+            i128
+            i16
+            i32
+          and $N others
+note: required by a bound in `rstml_ssr::Output::attribute`
+ --> src/lib.rs
+  |
+  |     pub fn attribute(
+  |            --------- required by a bound in this associated function
+...
+  |         value: &(impl Attribute + ?Sized),
+  |                       ^^^^^^^^^ required by this bound in `Output::attribute`
+
+error[E0277]: the trait bound `Value: Attribute` is not satisfied
+ --> tests/ui/render_contracts.rs:7:35
+  |
+7 |     let _ = html! { <p data-state={serde_json::json!({"name": "value"})}/> };
+  |                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Attribute` is not implemented for `Value`
+  |
+  = help: the following other types implement trait `Attribute`:
+            &T
+            Option<T>
+            bool
+            f32
+            f64
+            i128
+            i16
+            i32
+          and $N others
+note: required by a bound in `rstml_ssr::Output::attribute`
+ --> src/lib.rs
+  |
+  |     pub fn attribute(
+  |            --------- required by a bound in this associated function
+...
+  |         value: &(impl Attribute + ?Sized),
+  |                       ^^^^^^^^^ required by this bound in `Output::attribute`

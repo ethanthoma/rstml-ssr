@@ -1,0 +1,24 @@
+[package]
+name = "rstml-ssr-macros"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Procedural macro implementation for rstml-ssr; use the rstml-ssr crate"
+readme = "README.md"
+documentation = "https://docs.rs/rstml-ssr-macros"
+keywords = ["html", "templates", "ssr", "rstml"]
+categories = ["template-engine", "web-programming"]
+
+[lib]
+proc-macro = true
+
+[lints]
+workspace = true
+
+[dependencies]
+proc-macro2 = "1.0.107"
+quote = "1.0.47"
+rstml = "0.13.1"
+syn = { version = "3.0.10", features = ["full"] }

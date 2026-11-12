@@ -1,0 +1,104 @@
+error: this element requires audited TrustedHtml in the initial API
+ --> tests/ui/raw_contexts.rs:5:22
+  |
+5 |     let _ = html! { <xmp/> };
+  |                      ^^^
+
+error: this element requires audited TrustedHtml in the initial API
+ --> tests/ui/raw_contexts.rs:6:22
+  |
+6 |     let _ = html! { <iframe/> };
+  |                      ^^^^^^
+
+error: this element requires audited TrustedHtml in the initial API
+ --> tests/ui/raw_contexts.rs:7:22
+  |
+7 |     let _ = html! { <noembed/> };
+  |                      ^^^^^^^
+
+error: this element requires audited TrustedHtml in the initial API
+ --> tests/ui/raw_contexts.rs:8:22
+  |
+8 |     let _ = html! { <noframes/> };
+  |                      ^^^^^^^^
+
+error: this element requires audited TrustedHtml in the initial API
+ --> tests/ui/raw_contexts.rs:9:22
+  |
+9 |     let _ = html! { <plaintext/> };
+  |                      ^^^^^^^^^
+
+error: dynamic style and native event-handler values are not supported
+  --> tests/ui/raw_contexts.rs:10:34
+   |
+10 |     let _ = html! { <div onclick={"alert(1)"}/> };
+   |                                  ^^^^^^^^^^^^
+
+error: dynamic style and native event-handler values are not supported
+  --> tests/ui/raw_contexts.rs:11:32
+   |
+11 |     let _ = html! { <div style={"color: red"}/> };
+   |                                ^^^^^^^^^^^^^^
+
+error: script and style content must be quoted text or a TrustedHtml expression
+  --> tests/ui/raw_contexts.rs:13:29
+   |
+13 |     let _ = html! { <script><div/></script> };
+   |                             ^^^^^^
+
+error: annotation-xml encoding must be a string literal so its child namespace is known
+  --> tests/ui/raw_contexts.rs:15:43
+   |
+15 |     let _ = html! { <math><annotation-xml encoding={"text/html"}/></math> };
+   |                                           ^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+ --> tests/ui/raw_contexts.rs:4:29
+  |
+4 |     let _ = html! { <script>{"alert(1)"}</script> };
+  |                             ^^^^^^^^^^^^
+  |                             |
+  |                             expected `&TrustedHtml<'_>`, found `&&str`
+  |                             arguments to this method are incorrect
+  |
+  = note: expected reference `&TrustedHtml<'_>`
+             found reference `&&str`
+note: method defined here
+ --> src/lib.rs
+  |
+  |     pub fn raw_value(&mut self, value: &TrustedHtml<'_>) -> RenderResult {
+  |            ^^^^^^^^^
+
+error[E0308]: mismatched types
+  --> tests/ui/raw_contexts.rs:12:28
+   |
+12 |     let _ = html! { <style>{String::from("p { color: red; }")}</style> };
+   |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |                            |
+   |                            expected `&TrustedHtml<'_>`, found `&String`
+   |                            arguments to this method are incorrect
+   |
+   = note: expected reference `&TrustedHtml<'_>`
+              found reference `&String`
+note: method defined here
+  --> src/lib.rs
+   |
+   |     pub fn raw_value(&mut self, value: &TrustedHtml<'_>) -> RenderResult {
+   |            ^^^^^^^^^
+
+error[E0308]: mismatched types
+  --> tests/ui/raw_contexts.rs:14:34
+   |
+14 |     let _ = html! { <svg><script>{"alert(1)"}</script></svg> };
+   |                                  ^^^^^^^^^^^^
+   |                                  |
+   |                                  expected `&TrustedHtml<'_>`, found `&&str`
+   |                                  arguments to this method are incorrect
+   |
+   = note: expected reference `&TrustedHtml<'_>`
+              found reference `&&str`
+note: method defined here
+  --> src/lib.rs
+   |
+   |     pub fn foreign_value(&mut self, value: &TrustedHtml<'_>) -> RenderResult {
+   |            ^^^^^^^^^^^^^

@@ -1,0 +1,29 @@
+id: browser-empty-catch
+language: JavaScript
+severity: error
+message: Handle the failure or select an explicit fallback instead of an empty catch block.
+files: [crates/rstml-ssr/tests/fixtures/browser-checks.js]
+rule:
+  kind: catch_clause
+  has:
+    field: body
+    kind: statement_block
+    regex: '^\{(?:\s|//[^\n]*|/\*[\s\S]*?\*/)*\}$'
+---
+id: browser-deferral-comment
+language: JavaScript
+severity: error
+message: Resolve incomplete behavior or describe a precise external constraint instead of a vague deferral.
+files: [crates/rstml-ssr/tests/fixtures/browser-checks.js]
+rule:
+  kind: comment
+  regex: '(?i)\b(for now|workaround|temporary)\b'
+---
+id: browser-host-path
+language: JavaScript
+severity: error
+message: Use configured resources instead of machine-specific filesystem paths.
+files: [crates/rstml-ssr/tests/fixtures/browser-checks.js]
+rule:
+  kind: string
+  regex: '["\x27]/(home|Users|tmp)/'

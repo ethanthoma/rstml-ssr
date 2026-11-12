@@ -1,0 +1,17 @@
+error: dynamic tag and attribute names are not supported
+ --> tests/ui/dynamic_names.rs:4:22
+  |
+4 |     let _ = html! { <{"div"}/> };
+  |                      ^^^^^^^
+
+error: invalid tag name or attribute key
+ --> tests/ui/dynamic_names.rs:5:35
+  |
+5 |     let _ = html! { <div {"title"}="value"/> };
+  |                                   ^
+
+error: attribute spreading and dynamic names are not supported
+ --> tests/ui/dynamic_names.rs:6:26
+  |
+6 |     let _ = html! { <div {"title"}/> };
+  |                          ^^^^^^^^^

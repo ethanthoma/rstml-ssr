@@ -1,0 +1,25 @@
+[package]
+name = "rstml-ssr"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Fallible server-side HTML rendering with rstml templates"
+readme = "../../README.md"
+documentation = "https://docs.rs/rstml-ssr"
+keywords = ["html", "templates", "ssr", "rstml"]
+categories = ["template-engine", "web-programming"]
+
+[lints]
+workspace = true
+
+[dependencies]
+rstml-ssr-macros = { version = "=0.1.0", path = "../rstml-ssr-macros" }
+
+[dev-dependencies]
+maud = "0.27"
+scraper = { version = "0.29.0", default-features = false }
+serde_json = "1.0.154"
+tiny_http = "0.12.0"
+trybuild = "1.0.122"

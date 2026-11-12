@@ -1,0 +1,47 @@
+error: void elements cannot have children
+ --> tests/ui/invalid_templates.rs:4:22
+  |
+4 |     let _ = html! { <INPUT>"child"</INPUT> };
+  |                      ^^^^^
+
+error: wrong close tag found
+ --> tests/ui/invalid_templates.rs:5:26
+  |
+5 |     let _ = html! { <div></span> };
+  |                          ^
+
+error: [help] open tag that should be closed; it's started here
+ --> tests/ui/invalid_templates.rs:5:21
+  |
+5 |     let _ = html! { <div></span> };
+  |                     ^
+
+error: expected quoted text, a Rust expression, or an HTML element
+ --> tests/ui/invalid_templates.rs:6:26
+  |
+6 |     let _ = html! { <div>unquoted text</div> };
+  |                          ^^^^^^^^^^^^^
+
+error: only <!DOCTYPE html> is supported
+ --> tests/ui/invalid_templates.rs:7:21
+  |
+7 |     let _ = html! { <!DOCTYPE svg> };
+  |                     ^^^^^^^^^^^^^^
+
+error: attribute bindings are not supported; use name={value}
+ --> tests/ui/invalid_templates.rs:8:26
+  |
+8 |     let _ = html! { <div title(value)/> };
+  |                          ^^^^^^^^^^^^
+
+error: NUL is not representable in HTML
+  --> tests/ui/invalid_templates.rs:12:24
+   |
+12 |     let _ = html! { <p>"\0"</p> };
+   |                        ^^^^
+
+error: NUL is not representable in HTML
+  --> tests/ui/invalid_templates.rs:13:30
+   |
+13 |     let _ = html! { <p title="\0"/> };
+   |                              ^^^^
