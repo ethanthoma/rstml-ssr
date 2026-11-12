@@ -11,6 +11,7 @@
 !/crates/*/LICENSE-MIT
 !/crates/*/LICENSE-APACHE
 !/crates/rstml-ssr-macros/README.md
+!/.github/workflows/*.yml
 
 # Rust source and test fixtures
 !/Cargo.toml

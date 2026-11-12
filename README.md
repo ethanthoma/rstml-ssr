@@ -1,5 +1,10 @@
 # rstml-ssr
 
+[![CI](https://github.com/ethanthoma/rstml-ssr/actions/workflows/ci.yml/badge.svg)](https://github.com/ethanthoma/rstml-ssr/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/rstml-ssr.svg)](https://crates.io/crates/rstml-ssr)
+[![docs.rs](https://docs.rs/rstml-ssr/badge.svg)](https://docs.rs/rstml-ssr)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
+
 Server-side HTML templates for Rust, using
 [rstml](https://github.com/rs-tml/rstml) syntax and ordinary Rust expressions.
 
@@ -119,6 +124,12 @@ nix flake check
 
 Template formatting uses `leptosfmt` alongside `rustfmt`. Nix checks enforce
 formatting and structural lint rules.
+
+Release tags must match the workspace version, for example `v0.1.0`, and point
+to a commit on `main`. The release workflow runs CI, publishes the macro crate
+before the runtime, then creates a GitHub release. Publishing uses the
+repository's `CARGO_REGISTRY_TOKEN` Actions secret. On failure, use GitHub's
+"Re-run failed jobs" option to keep successful jobs complete.
 
 ## License
 

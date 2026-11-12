@@ -24,7 +24,7 @@
         {
           default = pkgs.rustPlatform.buildRustPackage {
             pname = "rstml-ssr";
-            version = "0.1.0";
+            version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
             src = pkgs.lib.cleanSource self;
             cargoLock.lockFile = ./Cargo.lock;
             cargoBuildFlags = [ "--workspace" ];
@@ -46,6 +46,18 @@
             ast-grep scan --config .ast-grep/sgconfig.yml crates
             touch "$out"
           '';
+          readme =
+            let
+              runtime = builtins.fromTOML (builtins.readFile ./crates/rstml-ssr/Cargo.toml);
+              macros = builtins.fromTOML (builtins.readFile ./crates/rstml-ssr-macros/Cargo.toml);
+            in
+            assert runtime.package.readme == "../../README.md";
+            assert macros.package.readme == "README.md";
+            pkgs.runCommand "rstml-ssr-package-readme" { } ''
+              test -s ${self}/README.md
+              test -s ${self}/crates/rstml-ssr-macros/README.md
+              touch "$out"
+            '';
           formatting =
             pkgs.runCommand "rstml-ssr-formatting"
               {
@@ -57,6 +69,7 @@
                   pkgs.python3Packages.mdformat
                   pkgs.biome
                   pkgs.yamlfmt
+                  pkgs.actionlint
                 ];
               }
               ''
@@ -72,6 +85,8 @@
                 mdformat --check --wrap 80 --number README.md crates/rstml-ssr-macros/README.md crates/rstml-ssr/tests/fixtures/README.md
                 biome format crates/rstml-ssr/tests/fixtures/browser-checks.js
                 yamlfmt -lint .ast-grep
+                yamlfmt -lint .github/workflows
+                actionlint .github/workflows/*.yml
                 touch "$out"
               '';
         }
@@ -90,6 +105,10 @@
               pkgs.rustfmt
               pkgs.leptosfmt
               pkgs.secretspec
+              pkgs.git
+              pkgs.gh
+              pkgs.actionlint
+              pkgs.ripgrep
               pkgs.clippy
               pkgs.ast-grep
               pkgs.rust-analyzer
