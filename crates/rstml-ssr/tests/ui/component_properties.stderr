@@ -1,0 +1,41 @@
+error[E0599]: no method named `build` found for struct `GreetingPropsBuilder<'_, rstml_ssr::__Missing>` in the current scope
+ --> tests/ui/component_properties.rs:9:22
+  |
+3 | #[component]
+  | ------------ method `build` not found for this struct
+...
+9 |     let _ = html! { <Greeting /> };
+  |                      ^^^^^^^^ method not found in `GreetingPropsBuilder<'_, rstml_ssr::__Missing>`
+  |
+  = note: the method was found for `GreetingPropsBuilder<'__rstml_0, rstml_ssr::__Set<&'__rstml_0 str>>`
+
+error[E0308]: mismatched types
+  --> tests/ui/component_properties.rs:10:36
+   |
+10 |     let _ = html! { <Greeting name=42_u32 /> };
+   |                               ---- ^^^^^^ expected `&str`, found `u32`
+   |                               |
+   |                               arguments to this method are incorrect
+   |
+note: method defined here
+  --> tests/ui/component_properties.rs:4:13
+   |
+ 3 | #[component]
+   | ------------
+ 4 | fn Greeting(name: &str) -> RenderResult {
+   |             ^^^^
+
+error[E0599]: no method named `unknown` found for struct `GreetingPropsBuilder<'__rstml_0, __RstmlState0>` in the current scope
+  --> tests/ui/component_properties.rs:11:42
+   |
+ 3 | #[component]
+   | ------------ method `unknown` not found for this struct
+...
+11 |     let _ = html! { <Greeting name="Ada" unknown=true /> };
+   |                                          ^^^^^^^ method not found in `GreetingPropsBuilder<'_, rstml_ssr::__Set<&str>>`
+
+error[E0433]: cannot find type `UnknownComponent` in this scope
+  --> tests/ui/component_properties.rs:12:22
+   |
+12 |     let _ = html! { <UnknownComponent /> };
+   |                      ^^^^^^^^^^^^^^^^ use of undeclared type `UnknownComponent`

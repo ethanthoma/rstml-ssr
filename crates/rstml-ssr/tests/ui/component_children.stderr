@@ -1,0 +1,13 @@
+error[E0382]: use of moved value
+ --> tests/ui/component_children.rs:3:1
+  |
+3 | #[component]
+  | ^^^^^^^^^^^^ value used here after move
+4 | fn Twice(children: Children) -> RenderResult {
+5 |     html! { <div>{children()}{children()}</div> }
+  |                   --------    -------- use occurs due to use in closure
+  |                   |
+  |                   variable moved due to use in closure
+  |
+  = note: move occurs because value has type `__RstmlChildren`, which does not implement the `Copy` trait
+  = note: this error originates in the attribute macro `component` (in Nightly builds, run with -Z macro-backtrace for more info)

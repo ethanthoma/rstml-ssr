@@ -1,0 +1,11 @@
+error: children slots in SVG or MathML are not supported
+ --> tests/ui/component_namespaces.rs:8:18
+  |
+8 |     html! { <svg>{children()}</svg> }
+  |                  ^^^^^^^^^^^^
+
+error: component calls in SVG or MathML are not supported; put the namespace root inside the component
+  --> tests/ui/component_namespaces.rs:12:27
+   |
+12 |     let _ = html! { <svg><Path /></svg> };
+   |                           ^^^^

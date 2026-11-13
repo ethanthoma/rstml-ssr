@@ -1,7 +1,7 @@
 use rstml_ssr::html;
 
 fn main() {
-    let _ = html! { <INPUT>"child"</INPUT> };
+    let _ = html! { <input>"child"</input> };
     let _ = html! { <div></span> };
     let _ = html! { <div>unquoted text</div> };
     let _ = html! { <!DOCTYPE svg> };

@@ -11,7 +11,7 @@ use std::{
     time::Duration,
 };
 
-use rstml_ssr::{html, render};
+use rstml_ssr::{Children, RenderResult, component, html};
 use serde_json::{Value, json};
 use tiny_http::{Header, Method, Request, Response, Server};
 
@@ -19,6 +19,50 @@ const NOTE: &str = "\"'&<> é🦀";
 const PATCH_TEXT: &str =
     "first line\n\n\"'&<img src=x onerror=\"globalThis.test_xss_fired=true\"> é🦀\r\nlast\r";
 const SUBMIT_EXPRESSION: &str = "@post('/patch', {contentType: 'form'})";
+
+#[component]
+fn BrowserSvg() -> RenderResult {
+    html! {
+        <svg viewBox="0 0 10 10">
+            <path id="inline-path" d="M0 0L10 10" />
+            <script>"globalThis.foreign_script_checked = 1 < 2 && 'SVG&A';"</script>
+            <style>".foreign-check > span { color: rgb(12, 34, 56); }"</style>
+        </svg>
+    }
+}
+
+#[component]
+fn BrowserForm(note: &str, submit: &str) -> RenderResult {
+    html! {
+        <form
+            id="patch-form"
+            data-on:submit=submit
+            data-indicator:fetching
+            data-attr:aria-busy="$fetching"
+        >
+            <input id="note" name="note" value=note />
+            <button id="send" type="submit" data-attr:disabled="$fetching">
+                "Send patch"
+            </button>
+        </form>
+    }
+}
+
+#[component]
+fn BrowserRegion(note: &str, children: Children) -> RenderResult {
+    html! {
+        <section
+            id="result"
+            data-round=1_u32
+            title=note
+            data-empty={Some("")}
+            data-optional={None::<&str>}
+            hidden=false
+        >
+            {children()}
+        </section>
+    }
+}
 
 #[test]
 #[ignore = "requires Chromium and RSTML_SSR_DATASTAR_JS pointing to a Datastar module"]
@@ -99,7 +143,7 @@ struct Fixture {
 
 impl Fixture {
     fn new(datastar: Vec<u8>) -> Self {
-        let page = render(&html! {
+        let page = html! {
             <!DOCTYPE html>
             <html lang="en">
                 <head>
@@ -107,11 +151,7 @@ impl Fixture {
                     <title>"Datastar browser fixture"</title>
                 </head>
                 <body data-signals="{\"fetching\":false}">
-                    <svg viewBox="0 0 10 10">
-                        <path id="inline-path" d="M0 0L10 10" />
-                        <script>"globalThis.foreign_script_checked = 1 < 2 && 'SVG&A';"</script>
-                        <style>".foreign-check > span { color: rgb(12, 34, 56); }"</style>
-                    </svg>
+                    <BrowserSvg />
                     <math>
                         <mtext>
                             <mglyph id="math-glyph" />
@@ -136,17 +176,7 @@ impl Fixture {
                         <span id="foreign-style">"Styled"</span>
                     </p>
                     <script>"globalThis.inline_script_checked = 1 < 2 && 'A&B';"</script>
-                    <form
-                        id="patch-form"
-                        data-on:submit={SUBMIT_EXPRESSION}
-                        data-indicator:fetching
-                        data-attr:aria-busy="$fetching"
-                    >
-                        <input id="note" name="note" value={NOTE} />
-                        <button id="send" type="submit" data-attr:disabled="$fetching">
-                            "Send patch"
-                        </button>
-                    </form>
+                    <BrowserForm note=NOTE submit=SUBMIT_EXPRESSION />
                     <p id="aria-status" data-attr:aria-busy="$fetching ? 'true' : 'false'">
                         "Status"
                     </p>
@@ -159,32 +189,25 @@ impl Fixture {
                     <script type="module" src="/checks.js" />
                 </body>
             </html>
-        })
+        }
         .unwrap()
         .into_string();
-        let patch = render(&html! {
-            <section
-                id="result"
-                data-round=1_u32
-                title={NOTE}
-                data-empty={Some("")}
-                data-optional={None::<&str>}
-                hidden={false}
-            >
+        let patch = html! {
+            <BrowserRegion note=NOTE>
                 <h2>"Patched"</h2>
                 <pre id="payload">{PATCH_TEXT}</pre>
                 <button id="followup" data-on:click="@get('/followup')" disabled={false}>
                     "Follow up"
                 </button>
-            </section>
-        })
+            </BrowserRegion>
+        }
         .unwrap()
         .into_string();
-        let followup = render(&html! {
+        let followup = html! {
             <p id="confirmation" data-round=2_u32>
                 "Second event worked"
             </p>
-        })
+        }
         .unwrap()
         .into_string();
         Self {

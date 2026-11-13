@@ -5,7 +5,22 @@ use rstml::{
     Parser, ParserConfig,
     node::{Infallible, KeyedAttributeValue, Node, NodeAttribute, NodeElement, NodeName},
 };
+use syn::ext::IdentExt;
 use syn::{Expr, Lit, Stmt, spanned::Spanned};
+
+mod component;
+
+#[proc_macro_attribute]
+pub fn component(arguments: TokenStream, input: TokenStream) -> TokenStream {
+    if !arguments.is_empty() {
+        return syn::Error::new(Span::call_site(), "component does not accept arguments")
+            .into_compile_error()
+            .into();
+    }
+    component::expand(input.into())
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
 
 const VOID_ELEMENTS: [&str; 14] = [
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
@@ -53,16 +68,7 @@ fn expand(input: Tokens) -> syn::Result<Tokens> {
     let runtime = runtime.stream();
     let input: Tokens = tokens.collect();
     check_input(input.clone(), 0, &mut InputBudget::default())?;
-    let destination_parser = |stream: syn::parse::ParseStream<'_>| {
-        let destination: Expr = stream.parse()?;
-        stream.parse::<syn::Token![,]>()?;
-        let body: Tokens = stream.parse()?;
-        Ok((destination, body))
-    };
-    let (destination, input) = match syn::parse::Parser::parse2(destination_parser, input.clone()) {
-        Ok((destination, body)) => (Some(destination), body),
-        Err(_) => (None, input),
-    };
+    let (destination, input) = destination(input);
     let config = ParserConfig::new().always_self_closed_elements(VOID_ELEMENTS.into());
     let nodes = Parser::new(config).parse_simple(input)?;
     let mut generator = Generator {
@@ -91,6 +97,19 @@ fn expand(input: Tokens) -> syn::Result<Tokens> {
         Ok(quote! {{
             #runtime::render_scope(|#output: &mut #runtime::Output| { #write })
         }})
+    }
+}
+
+fn destination(input: Tokens) -> (Option<Expr>, Tokens) {
+    let parser = |stream: syn::parse::ParseStream<'_>| {
+        let destination: Expr = stream.parse()?;
+        stream.parse::<syn::Token![,]>()?;
+        let body: Tokens = stream.parse()?;
+        Ok((destination, body))
+    };
+    match syn::parse::Parser::parse2(parser, input.clone()) {
+        Ok((destination, body)) => (Some(destination), body),
+        Err(_) => (None, input),
     }
 }
 
@@ -224,11 +243,100 @@ impl Generator {
         Ok(())
     }
 
+    fn component_element(
+        &mut self,
+        element: &NodeElement<Infallible>,
+        path: &syn::ExprPath,
+        namespace: MarkupContext,
+    ) -> syn::Result<()> {
+        if !matches!(namespace, MarkupContext::Html) {
+            return Err(syn::Error::new_spanned(
+                element.name(),
+                "component calls in SVG or MathML are not supported; put the namespace root inside the component",
+            ));
+        }
+        if element.attributes().len() > 16 {
+            return Err(syn::Error::new_spanned(
+                element.name(),
+                "components accept at most 16 properties",
+            ));
+        }
+        let mut names = std::collections::BTreeSet::new();
+        let mut setters = Vec::new();
+        for attribute in element.attributes() {
+            let NodeAttribute::Attribute(attribute) = attribute else {
+                return Err(syn::Error::new_spanned(
+                    attribute,
+                    "component property spreading is not supported",
+                ));
+            };
+            let name: Ident = syn::parse2(attribute.key.to_token_stream())?;
+            if !names.insert(name.unraw().to_string()) {
+                return Err(syn::Error::new_spanned(
+                    attribute,
+                    "duplicate component property",
+                ));
+            }
+            let value = match &attribute.possible_value {
+                KeyedAttributeValue::None => quote!(true),
+                KeyedAttributeValue::Value(_) => {
+                    let value = attribute.value().ok_or_else(|| {
+                        syn::Error::new_spanned(attribute, "expected a property value")
+                    })?;
+                    let value = unblock(value.clone());
+                    quote!(#value)
+                }
+                KeyedAttributeValue::Binding(_) => {
+                    return Err(syn::Error::new_spanned(
+                        attribute,
+                        "component bindings are not supported",
+                    ));
+                }
+            };
+            setters.push(quote_spanned!(attribute.span()=> .#name(#value)));
+        }
+        self.flush();
+        let children = if element.children.is_empty() {
+            quote!()
+        } else {
+            if names.contains("children") {
+                return Err(syn::Error::new_spanned(
+                    element.name(),
+                    "children cannot be supplied as both a property and nested content",
+                ));
+            }
+            let outer = std::mem::take(&mut self.body);
+            self.nodes(&element.children, namespace)?;
+            self.flush();
+            let body = std::mem::replace(&mut self.body, outer);
+            let output = &self.output;
+            let runtime = &self.runtime;
+            quote!(.children(move |#output: &mut #runtime::Output| { #body ::core::result::Result::Ok(()) }))
+        };
+        let output = &self.output;
+        let properties = Ident::new("__rstml_properties", Span::mixed_site());
+        self.body.extend(quote_spanned! {element.name().span()=> {
+            let #properties = #path::builder() #(#setters)* #children .build();
+            #output.component(|#output| #path::render(#output, #properties))?;
+        }});
+        Ok(())
+    }
+
     fn element(
         &mut self,
         element: &NodeElement<Infallible>,
         namespace: MarkupContext,
     ) -> syn::Result<()> {
+        if let NodeName::Path(path) = element.name() {
+            if path
+                .path
+                .segments
+                .last()
+                .is_some_and(|segment| segment.ident.to_string().starts_with(char::is_uppercase))
+            {
+                return self.component_element(element, path, namespace);
+            }
+        }
         let name = literal_name(element.name())?;
         let name_lowercase = name.to_ascii_lowercase();
         if matches!(

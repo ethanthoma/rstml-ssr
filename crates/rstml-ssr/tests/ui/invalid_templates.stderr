@@ -1,8 +1,8 @@
-error: void elements cannot have children
- --> tests/ui/invalid_templates.rs:4:22
+error: close tag was parsed while waiting for open tag
+ --> tests/ui/invalid_templates.rs:4:36
   |
-4 |     let _ = html! { <INPUT>"child"</INPUT> };
-  |                      ^^^^^
+4 |     let _ = html! { <input>"child"</input> };
+  |                                    ^
 
 error: wrong close tag found
  --> tests/ui/invalid_templates.rs:5:26

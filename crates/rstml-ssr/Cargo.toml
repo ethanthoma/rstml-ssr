@@ -15,7 +15,7 @@ categories = ["template-engine", "web-programming"]
 workspace = true
 
 [dependencies]
-rstml-ssr-macros = { version = "=0.3.0", path = "../rstml-ssr-macros" }
+rstml-ssr-macros = { version = "=0.4.0", path = "../rstml-ssr-macros" }
 
 [dev-dependencies]
 maud = "0.27"

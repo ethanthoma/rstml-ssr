@@ -1,0 +1,23 @@
+error: components must be synchronous, safe Rust functions
+ --> tests/ui/component_invalid.rs:4:1
+  |
+4 | async fn Async() -> rstml_ssr::RenderResult { Ok(()) }
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: component type and const generics are not supported yet
+ --> tests/ui/component_invalid.rs:7:12
+  |
+7 | fn Generic<T>(value: T) -> rstml_ssr::RenderResult { let _ = value; Ok(()) }
+  |            ^
+
+error: property annotations are not supported yet
+  --> tests/ui/component_invalid.rs:10:13
+   |
+10 | fn Optional(#[prop(optional)] value: Option<String>) -> rstml_ssr::RenderResult { let _ = value; Ok(()) }
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: duplicate or reserved component property name
+  --> tests/ui/component_invalid.rs:13:13
+   |
+13 | fn Reserved(build: bool) -> rstml_ssr::RenderResult { let _ = build; Ok(()) }
+   |             ^^^^^

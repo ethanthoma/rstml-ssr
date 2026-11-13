@@ -18,7 +18,6 @@ fn literal_markup_and_void_elements() {
         "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><link rel=\"stylesheet\" href=\"/main.css\"></head><body><custom-element xml:lang=\"en\"></custom-element><div></div><br><input required=\"\"></body></html>"
     );
     assert_eq!(render(&html! {}).unwrap().as_str(), "");
-    assert_eq!(render(&html! { <BR/> }).unwrap().as_str(), "<BR>");
 }
 
 #[test]

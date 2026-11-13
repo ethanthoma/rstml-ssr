@@ -229,6 +229,30 @@ fn reusable_component_functions_need_no_forwarding_closure() {
 }
 
 #[test]
+fn children_cannot_replace_or_reset_the_owning_document() {
+    let mut output = Output::new(128);
+    assert_eq!(
+        output.scope(|output| {
+            output.text("parent")?;
+            output
+                .scope(|output| output.text("replacement"))
+                .map(|_| ())
+        }),
+        Err(RenderError::NestedScope)
+    );
+    assert_eq!(output.scope(|_| Ok(())).unwrap(), "");
+    assert_eq!(
+        output.component(|output| {
+            output
+                .scope(|output| output.text("replacement"))
+                .map(|_| ())
+        }),
+        Err(RenderError::NestedScope)
+    );
+    assert_eq!(output.scope(|output| output.text("next")).unwrap(), "next");
+}
+
+#[test]
 fn nested_owned_results_propagate_errors_instead_of_rendering_them() {
     for error in [
         RenderError::OutputLimit,

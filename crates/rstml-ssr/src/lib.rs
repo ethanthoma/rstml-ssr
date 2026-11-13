@@ -14,6 +14,39 @@
 
 use std::fmt;
 
+extern crate self as rstml_ssr;
+
+/// Declare a writer component with named, type-checked properties.
+/// Inside the component, `html!` writes into the caller's rendering scope.
+/// Required concrete properties, lifetime parameters, and `children: Children`
+/// are supported. Type/const generics and property annotations are not supported.
+/// Declarations accept 16 properties and 64 borrowed lifetimes. Property names
+/// starting with `__`, and `build`, are reserved for generated implementation.
+///
+/// ```
+/// use rstml_ssr::{component, html, RenderResult};
+///
+/// #[component]
+/// fn Greeting(name: &str) -> RenderResult {
+///     let message = format!("Hello, {name}");
+///     html! { <p>{message}</p> }
+/// }
+///
+/// let page = html! { <Greeting name="<Ada>" /> }?;
+/// assert_eq!(page.as_str(), "<p>Hello, &lt;Ada&gt;</p>");
+/// # Ok::<(), rstml_ssr::RenderError>(())
+/// ```
+pub use rstml_ssr_macros::component;
+
+/// Annotation for a one-shot child writer in a `#[component]` declaration.
+/// The attribute replaces this marker with a generic, unboxed callback.
+pub enum Children {}
+
+#[doc(hidden)]
+pub struct __Missing;
+#[doc(hidden)]
+pub struct __Set<T>(pub T);
+
 #[doc(hidden)]
 pub use rstml_ssr_macros::html as __html;
 
@@ -30,6 +63,8 @@ macro_rules! html {
 
 pub const OUTPUT_SIZE_BYTES_MAX: u32 = 1_048_576;
 pub const ITEM_COUNT_MAX: u32 = 65_536;
+/// Maximum active component and writer-callback calls in one output.
+pub const COMPONENT_DEPTH_MAX: u32 = 64;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RenderError {
@@ -39,6 +74,8 @@ pub enum RenderError {
     ItemLimit,
     NullCharacter,
     InvalidRawText,
+    ComponentDepth,
+    NestedScope,
 }
 
 impl fmt::Display for RenderError {
@@ -50,6 +87,8 @@ impl fmt::Display for RenderError {
             Self::ItemLimit => "HTML list item limit exceeded",
             Self::NullCharacter => "NUL is not representable in HTML",
             Self::InvalidRawText => "raw text contains an HTML tokenizer control sequence",
+            Self::ComponentDepth => "HTML component nesting limit exceeded",
+            Self::NestedScope => "cannot replace an active HTML document scope",
         })
     }
 }
@@ -69,10 +108,17 @@ pub enum RawTextElement {
     Style,
 }
 
+enum OutputPhase {
+    Idle,
+    Writing,
+}
+
 /// Low-level errors leave partial output. `Output::render` clears failed documents.
 pub struct Output {
     value: String,
     limit_bytes: u32,
+    component_depth: u32,
+    phase: OutputPhase,
 }
 
 impl Output {
@@ -81,6 +127,8 @@ impl Output {
         Self {
             value: String::new(),
             limit_bytes,
+            component_depth: 0,
+            phase: OutputPhase::Idle,
         }
     }
 
@@ -91,12 +139,22 @@ impl Output {
 
     /// Replace the document using a one-shot component, retaining buffer capacity.
     /// Errors clear partial output; the callback cannot return borrowed output.
+    /// Nested document scopes are rejected. Discard the buffer after a callback panic.
     pub fn scope(
         &mut self,
         component: impl FnOnce(&mut Self) -> RenderResult,
     ) -> RenderResult<&str> {
+        if matches!(self.phase, OutputPhase::Writing) {
+            return Err(RenderError::NestedScope);
+        }
+        if self.component_depth != 0 {
+            return Err(RenderError::NestedScope);
+        }
         self.value.clear();
-        if let Err(error) = component(self) {
+        self.phase = OutputPhase::Writing;
+        let result = component(self);
+        self.phase = OutputPhase::Idle;
+        if let Err(error) = result {
             self.value.clear();
             return Err(error);
         }
@@ -106,7 +164,13 @@ impl Output {
     /// Execute a child component in this output without an intermediate buffer.
     /// Components must propagate write errors and should not perform application mutations.
     pub fn component(&mut self, component: impl FnOnce(&mut Self) -> RenderResult) -> RenderResult {
-        component(self)
+        if self.component_depth >= COMPONENT_DEPTH_MAX {
+            return Err(RenderError::ComponentDepth);
+        }
+        self.component_depth += 1;
+        let result = component(self);
+        self.component_depth -= 1;
+        result
     }
 
     /// Write a bounded slice through child components without collecting markup.
@@ -243,6 +307,10 @@ impl Output {
 }
 
 /// Bypasses escaping. Never wrap untrusted input.
+/// Script and style interpolation requires audited `TrustedHtml`. Raw-text
+/// tokenizer control sequences and NUL are rejected, even across interpolations.
+/// For JSON-LD, serialize JSON and escape `<` as `\u003c` before wrapping it.
+/// This does not validate URL schemes, JavaScript, CSS, or Datastar expressions.
 ///
 /// ```compile_fail
 /// use rstml_ssr::{Output, TrustedHtml};
@@ -364,7 +432,7 @@ where
 
 impl<F: Fn(&mut Output) -> RenderResult> Render for Component<F> {
     fn render(&self, output: &mut Output) -> RenderResult {
-        (self.0)(output)
+        output.component(&self.0)
     }
 }
 

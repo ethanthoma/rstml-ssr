@@ -1,0 +1,11 @@
+error: duplicate component property
+ --> tests/ui/component_duplicate.rs:9:37
+  |
+9 |     let _ = html! { <Field id="one" id="two">"child"</Field> };
+  |                                     ^^^^^^^^
+
+error: children cannot be supplied as both a property and nested content
+  --> tests/ui/component_duplicate.rs:10:22
+   |
+10 |     let _ = html! { <Field id="one" children={|_| Ok(())}>"child"</Field> };
+   |                      ^^^^^
