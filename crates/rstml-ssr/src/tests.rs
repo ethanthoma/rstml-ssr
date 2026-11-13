@@ -1,7 +1,7 @@
 use std::cell::Cell;
 
 use super::{
-    OUTPUT_SIZE_BYTES_MAX, Output, Render, RenderError, TrustedHtml, each, fragment, lazy, render,
+    OUTPUT_SIZE_BYTES_MAX, Output, Render, RenderError, TrustedHtml, component, each, lazy, render,
     render_with_limit,
 };
 
@@ -50,9 +50,9 @@ fn reservation_failures_propagate_at_every_growth_point() {
     let text = "<&>\"é".repeat(200);
     let trusted = TrustedHtml(&text);
     let owned = render(&text).unwrap();
-    let attribute = fragment(|output| output.attribute("data-on:submit", &text));
+    let attribute = component(|output| output.attribute("data-on:submit", &text));
     let padding = "x".repeat(100);
-    let numeric = fragment(|output| {
+    let numeric = component(|output| {
         output.trusted(TrustedHtml("<div"))?;
         output.attribute("padding", &padding)?;
         output.attribute("count", &u128::MAX)?;
@@ -96,7 +96,7 @@ fn reservation_failures_propagate_at_every_growth_point() {
         assert!(reservation_count > 0, "{name}");
         for success_count in 0..reservation_count {
             let completed = Cell::new(false);
-            let checked = fragment(|output| {
+            let checked = component(|output| {
                 value.render(output)?;
                 completed.set(true);
                 Ok(())
@@ -149,7 +149,7 @@ fn failed_growth_preserves_existing_bytes_and_capacity() {
 fn omitted_content_and_limits_do_not_attempt_reservation() {
     let failure = ReservationFailure::after(0);
     assert_eq!(render("").unwrap().as_str(), "");
-    let omitted = fragment(|output| {
+    let omitted = component(|output| {
         output.attribute("disabled", &false)?;
         output.attribute("title", &None::<&str>)
     });
@@ -172,7 +172,7 @@ fn reusable_output_retains_capacity_and_clears_failed_documents() {
             assert_eq!(output.value.capacity(), capacity_size_bytes);
         }
         let larger = "x".repeat(capacity_size_bytes + 1);
-        let growth = fragment(|output| {
+        let growth = component(|output| {
             output.text("prefix")?;
             output.text(&larger)
         });

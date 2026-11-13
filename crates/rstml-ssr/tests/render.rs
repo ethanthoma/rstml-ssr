@@ -1,4 +1,4 @@
-use rstml_ssr::{Output, Render, RenderError, TrustedHtml, fragment, render, render_with_limit};
+use rstml_ssr::{Output, Render, RenderError, TrustedHtml, component, render, render_with_limit};
 
 #[test]
 fn generated_unicode_escaping_and_fragment_boundaries() {
@@ -14,7 +14,7 @@ fn generated_unicode_escaping_and_fragment_boundaries() {
             .replace('>', "&gt;")
             .replace('\r', "&#13;");
         assert_eq!(render(&input).unwrap().as_str(), expected);
-        let pieces = fragment(|output| {
+        let pieces = component(|output| {
             for character in input.chars() {
                 let mut bytes = [0; 4];
                 output.text(character.encode_utf8(&mut bytes))?;
@@ -22,7 +22,7 @@ fn generated_unicode_escaping_and_fragment_boundaries() {
             Ok(())
         });
         assert_eq!(render(&pieces).unwrap().as_str(), expected);
-        let attribute = fragment(|output| output.attribute("data-on:submit", &input));
+        let attribute = component(|output| output.attribute("data-on:submit", &input));
         assert_eq!(
             render(&attribute).unwrap().as_str(),
             format!(" data-on:submit=\"{}\"", expected.replace('"', "&quot;"))
@@ -32,13 +32,13 @@ fn generated_unicode_escaping_and_fragment_boundaries() {
 
 #[test]
 fn omission_composition_and_numeric_contracts() {
-    let child = fragment(|output| {
+    let child = component(|output| {
         output.trusted(TrustedHtml("<span>"))?;
         "<&>".render(output)?;
         output.trusted(TrustedHtml("</span>"))
     });
     let owned = render(&child).unwrap();
-    let parent = fragment(|output| {
+    let parent = component(|output| {
         output.trusted(TrustedHtml("<input"))?;
         output.attribute("disabled", &false)?;
         output.attribute("required", &true)?;
@@ -74,7 +74,7 @@ fn byte_limits_include_escaping_and_nested_output() {
             assert_eq!(result.unwrap(), escaped);
         }
     }
-    let nested = fragment(|output| {
+    let nested = component(|output| {
         escaped.render(output)?;
         escaped.render(output)
     });
@@ -103,7 +103,7 @@ fn invalid_attribute_names_fail_before_writing() {
 #[test]
 fn nul_is_rejected_in_text_and_attributes() {
     assert_eq!(render(&"before\0after"), Err(RenderError::NullCharacter));
-    let attribute = fragment(|output| output.attribute("data-on:submit", &"before\0after"));
+    let attribute = component(|output| output.attribute("data-on:submit", &"before\0after"));
     assert_eq!(render(&attribute), Err(RenderError::NullCharacter));
 }
 
@@ -118,7 +118,7 @@ fn unsized_values_render_without_extra_references() {
     let content: &dyn Render = &text;
     assert_eq!(render(content).unwrap().as_str(), "value");
     let attribute: &dyn Attribute = &text;
-    let page = fragment(|output| {
+    let page = component(|output| {
         output.attribute("title", "<&>")?;
         output.attribute("data-value", attribute)
     });

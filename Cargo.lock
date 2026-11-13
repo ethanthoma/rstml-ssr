@@ -374,7 +374,7 @@ dependencies = [
 
 [[package]]
 name = "rstml-ssr"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "maud",
  "rstml-ssr-macros",
@@ -386,7 +386,7 @@ dependencies = [
 
 [[package]]
 name = "rstml-ssr-macros"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "proc-macro2",
  "quote",

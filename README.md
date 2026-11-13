@@ -16,7 +16,7 @@ bytes. No browser runtime is required.
 
 ```toml
 [dependencies]
-rstml-ssr = "0.2"
+rstml-ssr = "0.3"
 ```
 
 ## Owned HTML
@@ -48,20 +48,20 @@ messages.
 ## Components and shared output
 
 A component is an ordinary function taking `&mut Output` and returning
-`RenderResult`. `write_html!` appends to that output instead of allocating a
-child document. A one-argument content closure invokes a child component in the
-same scope:
+`RenderResult`. The `html! { output, ... }` form appends to that output instead
+of allocating a child document. A one-argument content closure invokes a child
+component in the same scope:
 
 ```rust
-use rstml_ssr::{Output, RenderResult, render_scope, write_html};
+use rstml_ssr::{Output, RenderResult, render_scope, html};
 
 fn greeting(output: &mut Output, name: &str) -> RenderResult {
     let message = format!("Hello, {name}");
-    write_html! { output, <p>{message}</p> }
+    html! { output, <p>{message}</p> }
 }
 
 fn card(output: &mut Output, name: &str) -> RenderResult {
-    write_html! { output,
+    html! { output,
         <section>{|output| greeting(output, name)}</section>
     }
 }
@@ -85,8 +85,14 @@ callbacks.
 
 An owned child from `html!` can also be interpolated, but its bytes are copied
 into the parent. Use shared-output components when that intermediate document is
-unnecessary. `html!` and `write_html!` share the same code generator and
-validation rules.
+unnecessary. Both forms share the same code generator and validation rules. The
+output destination is explicit, not inferred from variable names or return
+types.
+
+For a component taking only the output, use `{component(footer)}` rather than
+`{|output| footer(output)}`. The `component` adapter implements `Render` for a
+reusable writer function. Inline one-argument callbacks also support `FnOnce`
+captures.
 
 ## Expressions and trusted content
 
@@ -109,10 +115,10 @@ input. It cannot be used as an attribute value. Local generated strings can be
 borrowed while a component writes them:
 
 ```rust
-use rstml_ssr::{Output, RenderResult, TrustedHtml, write_html};
+use rstml_ssr::{Output, RenderResult, TrustedHtml, html};
 
 fn audited_svg(output: &mut Output, source: String) -> RenderResult {
-    write_html! { output, <div>{TrustedHtml(&source)}</div> }
+    html! { output, <div>{TrustedHtml(&source)}</div> }
 }
 ```
 
@@ -138,20 +144,25 @@ items per list.
 
 `Output::scope` replaces a document while retaining buffer capacity. Errors
 clear partial output. Use it only at document boundaries, not inside child
-components. Low-level writes through `write_html!`, `Output::component`, or
+components. Low-level writes through `html!`, `Output::component`, or
 `Render::render` can leave partial output on error. Propagate those errors to
 the owning scope before reusing the buffer.
 
 `Render` is the low-level mechanism for appending values and completed markup.
 `render` and `render_with_limit` materialize such values into owned documents.
 
+## Moving from 0.2
+
+Use `html! { output, ... }` in place of `write_html!`. The separate macro is
+removed. The reusable `fragment` adapter is named `component`.
+
 ## Moving from 0.1
 
-- `html!` now returns `RenderResult<Markup>`, not a reusable fragment.
+- `html!` now returns `RenderResult<Markup>`, not a reusable component.
 - Change owned view helpers to return `RenderResult<Markup>`. Their returned
   markup no longer needs lifetime parameters.
-- Use component functions, `write_html!`, and `render_scope` to compose without
-  intermediate buffers or `fragment(move |output| ...)` wrappers.
+- Use component functions, `html!`, and `render_scope` to compose without
+  intermediate buffers or `component(move |output| ...)` wrappers.
 - Repeated use of completed markup repeats the same bytes. To reevaluate data,
   execute the component again in a new scope.
 
@@ -163,7 +174,7 @@ cargo test --workspace
 nix flake check
 ```
 
-Leptosfmt formats both HTML macros. Run it with `leptosfmt.toml`, then run
+Leptosfmt formats both forms of `html!`. Run it with `leptosfmt.toml`, then run
 `cargo fmt --all`. Nix checks enforce both formatters and structural lint rules.
 
 Release tags must match the workspace version and point to a commit on `main`.

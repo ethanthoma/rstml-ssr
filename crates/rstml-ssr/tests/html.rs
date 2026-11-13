@@ -1,6 +1,5 @@
 use rstml_ssr::{
-    Markup, RenderError, RenderResult, TrustedHtml, fragment, html, render, render_with_limit,
-    write_html,
+    Markup, RenderError, RenderResult, TrustedHtml, component, html, render, render_with_limit,
 };
 
 fn greeting(name: String) -> RenderResult<Markup> {
@@ -111,8 +110,8 @@ fn optional_and_collected_content_preserves_order_and_escaping() {
 fn lazy_content_evaluates_only_selected_branches_at_render_time() {
     let selected = std::cell::Cell::new(false);
     let calls = std::cell::Cell::new(0_u32);
-    let page = fragment(|output| {
-        write_html! { output,
+    let page = component(|output| {
+        html! { output,
             {|| {
                 if selected.get() {
                     calls.set(calls.get() + 1);
@@ -143,8 +142,8 @@ fn lazy_content_evaluates_only_selected_branches_at_render_time() {
 fn typed_lazy_closures_preserve_rust_return_types() {
     let selected = std::cell::Cell::new(false);
     let calls = std::cell::Cell::new(0_u32);
-    let page = fragment(|output| {
-        write_html! { output,
+    let page = component(|output| {
+        html! { output,
             {|| -> &'static str {
                 calls.set(calls.get() + 1);
                 if selected.get() { "<&>" } else { "hidden" }

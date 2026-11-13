@@ -1,20 +1,20 @@
 #![deny(warnings)]
 
-use rstml_ssr::{Output, RenderResult, html, render_scope, write_html};
+use rstml_ssr::{ Output , RenderResult , html , render_scope };
 
 fn card(output: &mut Output, name: &str, title: Option<&str>) -> RenderResult {
-    write_html! { output, <p title={title}>{name}</p> }
+    html! { output, <p title={title}>{name}</p> }
 }
 
 fn list(output: &mut Output, names: &[String]) -> RenderResult {
-    write_html! { output,
+    html! { output,
         <ul>
             {|output| {
                 output
                     .each(
                         names,
                         |output, name| {
-                            write_html! { output, <li>{name}</li> }
+                            html! { output, <li>{name}</li> }
                         },
                     )
             }}
@@ -23,7 +23,7 @@ fn list(output: &mut Output, names: &[String]) -> RenderResult {
 }
 
 fn shell(output: &mut Output, body: impl FnOnce(&mut Output) -> RenderResult) -> RenderResult {
-    write_html! { output,
+    html! { output,
         <!DOCTYPE html>
         <html>
             <head>

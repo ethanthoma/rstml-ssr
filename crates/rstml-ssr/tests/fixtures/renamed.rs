@@ -6,7 +6,7 @@ extern crate renamed;
 extern crate std;
 
 mod forwarded {
-    pub use crate::renamed::{html as template, write_html as append};
+    pub use crate::renamed::{html as template, html as append};
 }
 
 fn greeting(name: &str) -> renamed::RenderResult<renamed::Markup> {

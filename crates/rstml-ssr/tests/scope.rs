@@ -1,6 +1,6 @@
 use rstml_ssr::{
     Markup, Output, RenderError, RenderResult, TrustedHtml, html, render_scope,
-    render_scope_with_limit, write_html,
+    render_scope_with_limit,
 };
 use std::cell::Cell;
 
@@ -10,7 +10,7 @@ fn page(
     body: impl FnOnce(&mut Output) -> RenderResult,
 ) -> RenderResult {
     let title = format!("{title} - Research");
-    write_html! { output,
+    html! { output,
         <!DOCTYPE html>
         <html>
             <head>
@@ -25,12 +25,12 @@ fn structured_data(output: &mut Output, name: &str) -> RenderResult {
     let json = serde_json::json!({"name": name})
         .to_string()
         .replace('<', "\\u003c");
-    write_html! { output, <script type="application/ld+json">{TrustedHtml(&json)}</script> }
+    html! { output, <script type="application/ld+json">{TrustedHtml(&json)}</script> }
 }
 
 fn form(output: &mut Output, email: &str) -> RenderResult {
     let action = String::from("@post('/contact')");
-    write_html! { output,
+    html! { output,
         <form data-on:submit=action>
             <input type="email" name="email" value=email required />
             <button type="submit">"Send"</button>
@@ -103,7 +103,7 @@ fn eager_html_owns_bytes_and_borrows_indexed_fields_without_moving_them() {
 fn components_can_consume_owned_values_once() {
     let value = String::from("owned");
     let markup = render_scope(move |output| {
-        write_html! { output,
+        html! { output,
             <section>
                 {move |output| {
                     let consumed = value.into_bytes();
@@ -151,7 +151,7 @@ fn scope_failures_discard_partial_documents_and_stop_later_expressions() {
         let calls = Cell::new(0);
         assert_eq!(
             output.scope(|output| {
-                write_html!(output,
+                html!(output,
                     <div>
                         { |output| { output.text("partial")?; Err(error) } }
                         { { calls.set(calls.get() + 1); "unreachable" } }
@@ -163,9 +163,7 @@ fn scope_failures_discard_partial_documents_and_stop_later_expressions() {
         assert_eq!(calls.get(), 0);
         assert_eq!(output.scope(|_| Ok(())).unwrap(), "");
         assert_eq!(
-            output
-                .scope(|output| write_html!(output, <p>"next"</p>))
-                .unwrap(),
+            output.scope(|output| html!(output, <p>"next"</p>)).unwrap(),
             "<p>next</p>"
         );
     }
@@ -186,10 +184,10 @@ fn list_components_validate_count_and_stop_at_the_first_write_error() {
     assert_eq!(
         render_scope_with_limit(
             |output| {
-                write_html! { output,
+                html! { output,
                     <ul>{|output| output.each(&["first", "second"], |output, item| {
                         calls.set(calls.get() + 1);
-                        write_html! { output, <li>{item}</li> }
+                        html! { output, <li>{item}</li> }
                     })}</ul>
                 }
             },
@@ -198,6 +196,36 @@ fn list_components_validate_count_and_stop_at_the_first_write_error() {
         Err(RenderError::OutputLimit)
     );
     assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn one_macro_selects_owned_or_shared_output_without_ambient_context() {
+    let calls = Cell::new(0);
+    let shared = render_scope(|output| {
+        html! { { calls . set (calls . get () + 1) ; output }, <p>"shared"</p> }
+    })
+    .unwrap();
+    assert_eq!(calls.get(), 1);
+    assert_eq!(shared.as_str(), "<p>shared</p>");
+    assert_eq!(
+        html! { "before" <b>"after"</b> }.unwrap().as_str(),
+        "before<b>after</b>"
+    );
+    assert_eq!(
+        html! { {"before"} <b>"after"</b> }.unwrap().as_str(),
+        "before<b>after</b>"
+    );
+    let owned = html! { <p>"owned"</p> }.unwrap();
+    assert_eq!(owned.as_str(), "<p>owned</p>");
+}
+
+#[test]
+fn reusable_component_functions_need_no_forwarding_closure() {
+    fn footer(output: &mut Output) -> RenderResult {
+        html! { output, <footer>"end"</footer> }
+    }
+    let page = html! { <main>{rstml_ssr::component(footer)}</main> }.unwrap();
+    assert_eq!(page.as_str(), "<main><footer>end</footer></main>");
 }
 
 #[test]

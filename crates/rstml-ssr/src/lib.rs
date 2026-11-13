@@ -15,23 +15,16 @@
 use std::fmt;
 
 #[doc(hidden)]
-pub use rstml_ssr_macros::{html as __html, write_html as __write_html};
+pub use rstml_ssr_macros::html as __html;
 
-/// Render an owned document now. Returns `RenderResult<Markup>`.
-/// Interpolations are borrowed while writing, rather than captured for later.
-/// One-argument content closures write child components into the same scope.
+/// Render owned HTML, or append to an explicit output: `html! { output, <p/> }`.
+/// Owned HTML returns `RenderResult<Markup>`; appending returns `RenderResult`.
+/// Interpolations are borrowed while writing. One-argument content closures
+/// invoke child components in the same scope.
 #[macro_export]
 macro_rules! html {
     ($($tokens:tt)*) => {
         $crate::__html! { ($crate) $($tokens)* }
-    };
-}
-
-/// Append a template to the current rendering scope. Errors must be propagated.
-#[macro_export]
-macro_rules! write_html {
-    ($output:expr, $($tokens:tt)*) => {
-        $crate::__write_html! { ($crate) ($output) $($tokens)* }
     };
 }
 
@@ -343,10 +336,12 @@ impl Render for TrustedHtml<'_> {
     }
 }
 
-pub struct Fragment<F>(F);
+pub struct Component<F>(F);
 
-pub fn fragment<F: Fn(&mut Output) -> RenderResult>(render: F) -> Fragment<F> {
-    Fragment(render)
+/// Adapt a reusable writer function for content interpolation: `{component(footer)}`.
+/// Use a one-argument content closure for components consuming `FnOnce` captures.
+pub fn component<F: Fn(&mut Output) -> RenderResult>(render: F) -> Component<F> {
+    Component(render)
 }
 
 /// Invoke the callback on every render, rather than during construction.
@@ -355,7 +350,7 @@ where
     F: Fn() -> R,
     R: Render,
 {
-    fragment(move |output| render().render(output))
+    component(move |output| render().render(output))
 }
 
 /// Render a slice in order, rejecting oversized lists before invoking callbacks.
@@ -364,10 +359,10 @@ where
     R: Render,
     F: Fn(&'a T) -> R + 'a,
 {
-    fragment(move |output| output.each(items, |output, item| render_item(item).render(output)))
+    component(move |output| output.each(items, |output, item| render_item(item).render(output)))
 }
 
-impl<F: Fn(&mut Output) -> RenderResult> Render for Fragment<F> {
+impl<F: Fn(&mut Output) -> RenderResult> Render for Component<F> {
     fn render(&self, output: &mut Output) -> RenderResult {
         (self.0)(output)
     }

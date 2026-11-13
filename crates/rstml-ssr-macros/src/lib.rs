@@ -36,18 +36,7 @@ pub fn html(input: TokenStream) -> TokenStream {
         .into()
 }
 
-#[proc_macro]
-pub fn write_html(input: TokenStream) -> TokenStream {
-    expand_mode(input.into(), true)
-        .unwrap_or_else(syn::Error::into_compile_error)
-        .into()
-}
-
 fn expand(input: Tokens) -> syn::Result<Tokens> {
-    expand_mode(input, false)
-}
-
-fn expand_mode(input: Tokens, writing: bool) -> syn::Result<Tokens> {
     let mut tokens = input.into_iter();
     let Some(TokenTree::Group(runtime)) = tokens.next() else {
         return Err(syn::Error::new(
@@ -62,19 +51,18 @@ fn expand_mode(input: Tokens, writing: bool) -> syn::Result<Tokens> {
         ));
     }
     let runtime = runtime.stream();
-    let destination = if writing {
-        let Some(TokenTree::Group(destination)) = tokens.next() else {
-            return Err(syn::Error::new(
-                Span::call_site(),
-                "expected an output expression",
-            ));
-        };
-        Some(syn::parse2::<Expr>(destination.stream())?)
-    } else {
-        None
-    };
     let input: Tokens = tokens.collect();
     check_input(input.clone(), 0, &mut InputBudget::default())?;
+    let destination_parser = |stream: syn::parse::ParseStream<'_>| {
+        let destination: Expr = stream.parse()?;
+        stream.parse::<syn::Token![,]>()?;
+        let body: Tokens = stream.parse()?;
+        Ok((destination, body))
+    };
+    let (destination, input) = match syn::parse::Parser::parse2(destination_parser, input.clone()) {
+        Ok((destination, body)) => (Some(destination), body),
+        Err(_) => (None, input),
+    };
     let config = ParserConfig::new().always_self_closed_elements(VOID_ELEMENTS.into());
     let nodes = Parser::new(config).parse_simple(input)?;
     let mut generator = Generator {

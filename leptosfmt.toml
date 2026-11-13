@@ -2,6 +2,6 @@ max_width = 100
 tab_spaces = 4
 indentation_style = "Spaces"
 newline_style = "Unix"
-macro_names = ["html", "rstml_ssr::html", "write_html", "rstml_ssr::write_html"]
+macro_names = ["html", "rstml_ssr::html"]
 attr_value_brace_style = "Preserve"
 closing_tag_style = "Preserve"
