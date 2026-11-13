@@ -7,6 +7,28 @@ fn expand(input: TokenStream) -> syn::Result<TokenStream> {
 }
 
 #[test]
+fn macro_tail_blocks_unwrap_without_changing_statement_semantics() {
+    let expression = syn::parse_quote!({
+        html! { <p>"text"</p> }
+    });
+    assert!(matches!(super::unblock(expression), syn::Expr::Macro(_)));
+    for expression in [
+        syn::parse_quote!({
+            html! { <p>"text"</p> };
+        }),
+        syn::parse_quote!('label: {
+            html! { <p>"text"</p> }
+        }),
+        syn::parse_quote!({
+            let value = "text";
+            html! { <p>{value}</p> }
+        }),
+    ] {
+        assert!(matches!(super::unblock(expression), syn::Expr::Block(_)));
+    }
+}
+
+#[test]
 fn parser_budgets_reject_oversized_templates() {
     let tokens: TokenStream = (0..16_384).map(|_| quote!(x)).collect();
     assert!(check_input(tokens.clone(), 0, &mut InputBudget::default()).is_ok());

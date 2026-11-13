@@ -502,10 +502,14 @@ fn unblock(mut expression: Expr) -> Expr {
         if block.block.stmts.len() != 1 {
             break;
         }
-        let Stmt::Expr(value, None) = &block.block.stmts[0] else {
-            break;
+        expression = match &block.block.stmts[0] {
+            Stmt::Expr(value, None) => value.clone(),
+            Stmt::Macro(value) if value.semi_token.is_none() => Expr::Macro(syn::ExprMacro {
+                attrs: value.attrs.clone(),
+                mac: value.mac.clone(),
+            }),
+            _ => break,
         };
-        expression = value.clone();
     }
     expression
 }
