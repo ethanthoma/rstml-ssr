@@ -1,11 +1,7 @@
 use super::{Assets, CAPTCHA_CONFIGURATION, PageData, mark_geometry};
-use rstml_ssr::{Render, TrustedHtml, each, html};
+use rstml_ssr::{Markup, Render, RenderResult, TrustedHtml, each, html};
 
-pub fn page<'a>(
-    assets: &'a Assets,
-    meta: PageData<'a>,
-    body: impl Render + 'a,
-) -> impl Render + 'a {
+pub fn page(assets: &Assets, meta: PageData<'_>, body: impl Render) -> RenderResult<Markup> {
     html! {
         <!DOCTYPE html>
         <html
@@ -77,7 +73,7 @@ pub fn page<'a>(
     }
 }
 
-fn head<'a>(assets: &'a Assets, meta: PageData<'a>) -> impl Render + 'a {
+fn head(assets: &Assets, meta: PageData<'_>) -> RenderResult<Markup> {
     let social_image = format!(
         "https://matterstateresearch.com{}",
         assets.url("imgs/og-card.png")
@@ -133,7 +129,7 @@ const NAVIGATION_LINKS: [(&str, &str); 3] = [
     ("Contact", "/contact"),
 ];
 
-fn header(path: &str) -> impl Render + '_ {
+fn header(path: &str) -> RenderResult<Markup> {
     html! {
         <header
             data-site-header
@@ -172,7 +168,7 @@ fn header(path: &str) -> impl Render + '_ {
     }
 }
 
-fn institution_mark() -> impl Render {
+fn institution_mark() -> RenderResult<Markup> {
     html! {
         <svg
             viewBox="-6 -6 112 112"
@@ -188,7 +184,7 @@ fn institution_mark() -> impl Render {
     }
 }
 
-fn footer() -> impl Render {
+fn footer() -> RenderResult<Markup> {
     html! {
         <footer
             data-site-footer
@@ -222,7 +218,7 @@ fn footer() -> impl Render {
     }
 }
 
-fn arrow_right() -> impl Render {
+fn arrow_right() -> RenderResult<Markup> {
     html! {
         <svg
             aria-hidden="true"
@@ -252,7 +248,7 @@ fn navigation_current(href: &str, path: &str) -> Option<&'static str> {
     }
 }
 
-pub fn contact_form() -> impl Render {
+pub fn contact_form() -> RenderResult<Markup> {
     html! {
         <form
             method="post"
@@ -285,7 +281,7 @@ pub fn contact_form() -> impl Render {
     }
 }
 
-fn field<'a>(id: &'a str, label: &'a str, input: impl Render + 'a) -> impl Render + 'a {
+fn field(id: &str, label: &str, input: impl Render) -> RenderResult<Markup> {
     html! {
         <div class="flex flex-col gap-3xs">
             <label for={id} class="font-mono text-xs text-text-3">
@@ -296,7 +292,7 @@ fn field<'a>(id: &'a str, label: &'a str, input: impl Render + 'a) -> impl Rende
     }
 }
 
-fn required_input<'a>(id: &'a str, kind: &'a str, autocomplete: &'a str) -> impl Render + 'a {
+fn required_input(id: &str, kind: &str, autocomplete: &str) -> RenderResult<Markup> {
     html! {
         <input
             id={id}
@@ -309,7 +305,7 @@ fn required_input<'a>(id: &'a str, kind: &'a str, autocomplete: &'a str) -> impl
     }
 }
 
-fn captcha_submit() -> impl Render {
+fn captcha_submit() -> RenderResult<Markup> {
     html! {
         <div
             data-captcha-submit

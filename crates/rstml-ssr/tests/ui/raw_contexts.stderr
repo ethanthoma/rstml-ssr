@@ -62,7 +62,7 @@ error[E0308]: mismatched types
   |                             arguments to this method are incorrect
   |
   = note: expected reference `&TrustedHtml<'_>`
-             found reference `&&str`
+             found reference `&&'static str`
 note: method defined here
  --> src/lib.rs
   |
@@ -96,7 +96,7 @@ error[E0308]: mismatched types
    |                                  arguments to this method are incorrect
    |
    = note: expected reference `&TrustedHtml<'_>`
-              found reference `&&str`
+              found reference `&&'static str`
 note: method defined here
   --> src/lib.rs
    |

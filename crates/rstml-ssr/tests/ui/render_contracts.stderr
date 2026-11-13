@@ -13,9 +13,9 @@ error[E0277]: the trait bound `Ipv4Addr: Render` is not satisfied
             Fragment<F>
             Markup
             Option<T>
+            Result<T, RenderError>
             TrustedHtml<'_>
             Vec<T>
-            [T]
           and $N others
 
 error[E0277]: the trait bound `TrustedHtml<'_>: Attribute` is not satisfied

@@ -1,34 +1,46 @@
 #![deny(warnings)]
 
-use rstml_ssr::{Render, each, html, render};
+use rstml_ssr::{Output, RenderResult, html, render_scope, write_html};
 
-fn card<'a>(name: &'a str, title: Option<&'a str>) -> impl Render + 'a {
-    html! { <p title={title}>{name}</p> }
+fn card(output: &mut Output, name: &str, title: Option<&str>) -> RenderResult {
+    write_html! { output, <p title={title}>{name}</p> }
 }
 
-fn list(names: &[String]) -> impl Render + '_ {
-    html! { <ul>{each(names, |name| html! { <li>{name}</li> })}</ul> }
+fn list(output: &mut Output, names: &[String]) -> RenderResult {
+    write_html! { output,
+        <ul>
+            {|output| {
+                output
+                    .each(
+                        names,
+                        |output, name| {
+                            write_html! { output, <li>{name}</li> }
+                        },
+                    )
+            }}
+        </ul>
+    }
 }
 
-fn shell(content: impl Render) -> impl Render {
-    html! {
+fn shell(output: &mut Output, body: impl FnOnce(&mut Output) -> RenderResult) -> RenderResult {
+    write_html! { output,
         <!DOCTYPE html>
         <html>
             <head>
                 <title>"Test"</title>
             </head>
-            <body>{content}</body>
+            <body>{|output| body(output)}</body>
         </html>
     }
 }
 
 fn main() {
     let name = String::from("Ada");
-    let card = card(&name, Some("Title"));
-    assert_eq!(render(&card).unwrap().as_str(), "<p title=\"Title\">Ada</p>");
-    drop(card);
+    let card = render_scope(|output| card(output, &name, Some("Title"))).unwrap();
+    assert_eq!(card.as_str(), "<p title=\"Title\">Ada</p>");
     let names = [name];
-    assert!(render(&shell(list(&names))).unwrap().as_str().contains("<li>Ada</li>"));
+    let page = render_scope(|output| shell(output, |output| list(output, &names))).unwrap();
+    assert!(page.as_str().contains("<li>Ada</li>"));
     let selected = Some(String::from("owned"));
     let page = html! {
         {if let Some(value) = selected {
@@ -36,6 +48,6 @@ fn main() {
         } else {
             "empty"
         }}
-    };
-    assert_eq!(render(&page).unwrap().as_str(), "<b>owned</b>");
+    }.unwrap();
+    assert_eq!(page.as_str(), "<b>owned</b>");
 }

@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Delimiter, Ident, Span, TokenStream as Tokens, TokenTree};
-use quote::{ToTokens, format_ident, quote, quote_spanned};
+use quote::{ToTokens, quote, quote_spanned};
 use rstml::{
     Parser, ParserConfig,
     node::{Infallible, KeyedAttributeValue, Node, NodeAttribute, NodeElement, NodeName},
@@ -36,7 +36,18 @@ pub fn html(input: TokenStream) -> TokenStream {
         .into()
 }
 
+#[proc_macro]
+pub fn write_html(input: TokenStream) -> TokenStream {
+    expand_mode(input.into(), true)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
 fn expand(input: Tokens) -> syn::Result<Tokens> {
+    expand_mode(input, false)
+}
+
+fn expand_mode(input: Tokens, writing: bool) -> syn::Result<Tokens> {
     let mut tokens = input.into_iter();
     let Some(TokenTree::Group(runtime)) = tokens.next() else {
         return Err(syn::Error::new(
@@ -51,6 +62,17 @@ fn expand(input: Tokens) -> syn::Result<Tokens> {
         ));
     }
     let runtime = runtime.stream();
+    let destination = if writing {
+        let Some(TokenTree::Group(destination)) = tokens.next() else {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "expected an output expression",
+            ));
+        };
+        Some(syn::parse2::<Expr>(destination.stream())?)
+    } else {
+        None
+    };
     let input: Tokens = tokens.collect();
     check_input(input.clone(), 0, &mut InputBudget::default())?;
     let config = ParserConfig::new().always_self_closed_elements(VOID_ELEMENTS.into());
@@ -58,7 +80,6 @@ fn expand(input: Tokens) -> syn::Result<Tokens> {
     let mut generator = Generator {
         runtime,
         output: Ident::new("__rstml_output", Span::mixed_site()),
-        captures: Vec::new(),
         body: Tokens::new(),
         pending: String::new(),
     };
@@ -67,17 +88,22 @@ fn expand(input: Tokens) -> syn::Result<Tokens> {
     let Generator {
         runtime,
         output,
-        captures,
         body,
         ..
     } = generator;
-    Ok(quote! {{
-        #(#captures)*
-        #runtime::fragment(move |#output: &mut #runtime::Output| {
-            #body
-            ::core::result::Result::Ok(())
-        })
-    }})
+    let write = quote! {
+        #body
+        ::core::result::Result::Ok(())
+    };
+    if let Some(destination) = destination {
+        Ok(quote! {{
+            (|#output: &mut #runtime::Output| -> #runtime::RenderResult { #write })(&mut *(#destination))
+        }})
+    } else {
+        Ok(quote! {{
+            #runtime::render_scope(|#output: &mut #runtime::Output| { #write })
+        }})
+    }
 }
 
 #[derive(Default)]
@@ -138,7 +164,6 @@ fn check_input(input: Tokens, depth: u32, budget: &mut InputBudget) -> syn::Resu
 struct Generator {
     runtime: Tokens,
     output: Ident,
-    captures: Vec<Tokens>,
     body: Tokens,
     pending: String,
 }
@@ -154,20 +179,6 @@ impl Generator {
         }
     }
 
-    fn capture(&mut self, value: Expr) -> Tokens {
-        let value = unblock(value);
-        if borrowed_place(&value) {
-            return quote! { #value };
-        }
-        let name = format_ident!(
-            "__rstml_value_{}",
-            self.captures.len(),
-            span = Span::mixed_site()
-        );
-        self.captures.push(quote! { let #name = #value; });
-        quote! { #name }
-    }
-
     fn nodes(&mut self, nodes: &[Node], namespace: MarkupContext) -> syn::Result<()> {
         for node in nodes {
             match node {
@@ -179,8 +190,18 @@ impl Generator {
                 )?),
                 Node::Fragment(fragment) => self.nodes(&fragment.children, namespace)?,
                 Node::Block(block) => {
-                    let expression: Expr = syn::parse2(block.to_token_stream())?;
-                    let value = self.capture(syn::parse2(content_expression(
+                    let expression = unblock(syn::parse2(block.to_token_stream())?);
+                    if let Expr::Closure(callback) = &expression {
+                        if callback.inputs.len() == 1 {
+                            self.flush();
+                            let output = &self.output;
+                            self.body.extend(
+                                quote_spanned! {block.span()=> #output.component(#callback)?; },
+                            );
+                            continue;
+                        }
+                    }
+                    let value = unblock(syn::parse2(content_expression(
                         expression,
                         0,
                         &self.runtime,
@@ -337,7 +358,7 @@ impl Generator {
                 }
                 Node::Fragment(fragment) => self.raw_nodes(&fragment.children, namespace)?,
                 Node::Block(block) => {
-                    let value = self.capture(syn::parse2(block.to_token_stream())?);
+                    let value = unblock(syn::parse2(block.to_token_stream())?);
                     self.flush();
                     let output = &self.output;
                     if matches!(namespace, MarkupContext::Html) {
@@ -397,11 +418,11 @@ impl Generator {
                         "dynamic style and native event-handler values are not supported",
                     ));
                 }
-                let captured = self.capture(value.clone());
+                let expression = unblock(value.clone());
                 self.flush();
                 let output = &self.output;
                 self.body.extend(
-                    quote_spanned! {value.span()=> #output.attribute(#name, &(#captured))?; },
+                    quote_spanned! {value.span()=> #output.attribute(#name, &(#expression))?; },
                 );
             }
             KeyedAttributeValue::Binding(_) => {
@@ -477,18 +498,6 @@ fn escaped(value: &str, context: EscapeContext, span: Span) -> syn::Result<Strin
     } else {
         Ok(value)
     }
-}
-
-fn borrowed_place(mut expression: &Expr) -> bool {
-    for _ in 0..16_384 {
-        match expression {
-            Expr::Path(_) => return true,
-            Expr::Field(field) => expression = &field.base,
-            Expr::Reference(reference) => expression = &reference.expr,
-            _ => return false,
-        }
-    }
-    false
 }
 
 fn unblock(mut expression: Expr) -> Expr {

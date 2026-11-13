@@ -8,111 +8,152 @@
 Server-side HTML templates for Rust, using
 [rstml](https://github.com/rs-tml/rstml) syntax and ordinary Rust expressions.
 
-Templates produce reusable fragments. Nested fragments write into one output
-buffer, with text and attribute escaping handled by the renderer. No browser
-runtime is required.
+A rendering scope owns the output buffer. Components execute within that scope,
+borrowing their local values while writing. The completed document owns its
+bytes. No browser runtime is required.
 
 ## Installation
 
 ```toml
 [dependencies]
-rstml-ssr = "0.1"
+rstml-ssr = "0.2"
 ```
 
-## Render HTML
+## Owned HTML
+
+`html!` renders immediately and returns `RenderResult<Markup>`:
 
 ```rust
-use rstml_ssr::{RenderError, html, render};
+use rstml_ssr::{RenderResult, html};
 
-fn main() -> Result<(), RenderError> {
-    let name = "<visitor>";
+fn main() -> RenderResult {
+    let name = String::from("<visitor>");
     let page = html! {
         <p title={name}>"Hello, "{name}</p>
-    };
-
-    println!("{}", render(&page)?.as_str());
+    }?;
+    drop(name);
+    assert_eq!(page.as_str(), "<p title=\"&lt;visitor&gt;\">Hello, &lt;visitor&gt;</p>");
     Ok(())
 }
 ```
 
-Output:
+Interpolations are borrowed while writing. There are no expression-capture
+heuristics or retained template borrows. Rust expressions execute in document
+order. A write error stops subsequent expressions.
 
-```html
-<p title="&lt;visitor&gt;">Hello, &lt;visitor&gt;</p>
-```
+Use `as_str()` to borrow the completed HTML or `into_string()` to take it.
+Nested `RenderResult` values propagate their errors rather than rendering error
+messages.
 
-`html!` returns a fragment implementing `Render`. `render` turns it into owned
-`Markup`; use `as_str()` to borrow the HTML or `into_string()` to take it.
+## Components and shared output
 
-## Compose templates
-
-Use Rust functions for reusable markup and `each` to render a slice without
-collecting intermediate fragments:
+A component is an ordinary function taking `&mut Output` and returning
+`RenderResult`. `write_html!` appends to that output instead of allocating a
+child document. A one-argument content closure invokes a child component in the
+same scope:
 
 ```rust
-use rstml_ssr::{Render, each, html};
+use rstml_ssr::{Output, RenderResult, render_scope, write_html};
 
-fn names_list(names: &[String]) -> impl Render + '_ {
-    html! {
-        <section>
-            {if names.is_empty() {
-                html! { <p>"No names yet."</p> }
-            }}
-            <ul>{each(names, |name| html! { <li>{name}</li> })}</ul>
-        </section>
+fn greeting(output: &mut Output, name: &str) -> RenderResult {
+    let message = format!("Hello, {name}");
+    write_html! { output, <p>{message}</p> }
+}
+
+fn card(output: &mut Output, name: &str) -> RenderResult {
+    write_html! { output,
+        <section>{|output| greeting(output, name)}</section>
     }
+}
+
+fn main() -> RenderResult {
+    let page = render_scope(|output| card(output, "<visitor>"))?;
+    assert_eq!(page.as_str(), "<section><p>Hello, &lt;visitor&gt;</p></section>");
+    Ok(())
 }
 ```
 
+Callbacks accept `FnOnce`, so components can consume owned values. Components
+must propagate write errors. Keep mail delivery, database writes, and other
+application mutations outside rendering. Discarding output does not roll back
+those operations.
+
+Use `Output::each(items, |output, item| ...)` for bounded lists sharing the same
+buffer and byte budget. Oversized lists fail before invoking callbacks. Rust
+statements and control flow can live directly in component functions or child
+callbacks.
+
+An owned child from `html!` can also be interpolated, but its bytes are copied
+into the parent. Use shared-output components when that intermediate document is
+unnecessary. `html!` and `write_html!` share the same code generator and
+validation rules.
+
+## Expressions and trusted content
+
 Content expressions support `if`, `if let`, and `match`, including branches with
 different renderable types. An omitted `else`, `None`, or `()` renders nothing.
-Slices and vectors of renderable values render in order.
-
-Expressions are evaluated when the fragment is constructed. A zero-argument
-closure inside `{...}` runs on each render; use `lazy(callback)` for a named
-callback. Closures must implement `Fn`. Fragments follow Rust ownership and
-borrowing rules.
-
-## Attributes and trusted content
+Slices and vectors render in order. Explicit zero-argument callbacks and `lazy`
+remain available for low-level reusable `Render` fragments. Ordinary `html!`
+output is an eager snapshot, not a live view.
 
 - Text and double-quoted attribute values are escaped separately.
 - `false` and `None` omit an attribute. `true` emits an empty attribute; empty
   strings remain present.
 - Duplicate attribute names are compile errors, including case variants.
-- SVG and MathML can be written directly. Custom element names and Datastar
-  attributes such as `data-on:submit` are supported.
+- SVG, MathML, custom elements, and Datastar attributes are supported.
 - Dynamic names, attribute spreading, and dynamic native event-handler or
   `style` attributes are rejected.
 
 `TrustedHtml` bypasses escaping. Use it only for audited markup, never untrusted
-input. It cannot be used as an attribute value.
+input. It cannot be used as an attribute value. Local generated strings can be
+borrowed while a component writes them:
+
+```rust
+use rstml_ssr::{Output, RenderResult, TrustedHtml, write_html};
+
+fn audited_svg(output: &mut Output, source: String) -> RenderResult {
+    write_html! { output, <div>{TrustedHtml(&source)}</div> }
+}
+```
 
 Inline script and style bodies accept quoted source or `TrustedHtml` values.
 HTML raw-text bodies reject NUL and tokenizer control sequences, including
 sequences split across interpolations. For JSON-LD, serialize the JSON and
-escape `<` as `\u003c` before wrapping it in `TrustedHtml`.
-
-Other raw-text elements, such as `iframe`, require a complete `TrustedHtml`
-block.
+escape `<` as `\u003c` before wrapping it in `TrustedHtml`. Other raw-text
+elements, such as `iframe`, require a complete `TrustedHtml` block.
 
 Validate URL schemes, JavaScript, CSS, and Datastar expressions in the
-application; HTML escaping does not validate those languages.
+application. HTML escaping does not validate those languages.
 
 ## Errors and limits
 
-Rendering returns `Result<Markup, RenderError>`. Handle errors at the response
-boundary; template helpers can return `impl Render` without handling errors at
-every level.
+Handle the outer `RenderResult<Markup>` before constructing HTTP headers or SSE
+events. A failed `html!` or `render_scope` returns no document. Child components
+share the scope's byte budget. Rendering reports output limits, allocation
+failures, invalid attribute names, NUL, and invalid raw-text content.
 
-The default output limit is 1 MiB. Use `render_with_limit` to choose a different
-byte budget. Slices, vectors, and `each` accept at most 65,536 items per list.
-Rendering also reports allocation failures, invalid attribute names, NUL, and
-invalid raw-text content.
+The default output limit is 1 MiB. `render_scope_with_limit` accepts an explicit
+UTF-8 byte budget. Slices, vectors, and `Output::each` accept at most 65,536
+items per list.
 
-`Output::render` reuses buffer capacity across documents and returns a borrowed
-string. It clears the previous document and clears partial output on error.
-Low-level writes through `Render::render` can leave partial output after an
-error; discard that content before reusing the buffer.
+`Output::scope` replaces a document while retaining buffer capacity. Errors
+clear partial output. Use it only at document boundaries, not inside child
+components. Low-level writes through `write_html!`, `Output::component`, or
+`Render::render` can leave partial output on error. Propagate those errors to
+the owning scope before reusing the buffer.
+
+`Render` is the low-level mechanism for appending values and completed markup.
+`render` and `render_with_limit` materialize such values into owned documents.
+
+## Moving from 0.1
+
+- `html!` now returns `RenderResult<Markup>`, not a reusable fragment.
+- Change owned view helpers to return `RenderResult<Markup>`. Their returned
+  markup no longer needs lifetime parameters.
+- Use component functions, `write_html!`, and `render_scope` to compose without
+  intermediate buffers or `fragment(move |output| ...)` wrappers.
+- Repeated use of completed markup repeats the same bytes. To reevaluate data,
+  execute the component again in a new scope.
 
 ## Development
 
@@ -122,14 +163,13 @@ cargo test --workspace
 nix flake check
 ```
 
-Template formatting uses `leptosfmt` alongside `rustfmt`. Nix checks enforce
-formatting and structural lint rules.
+Leptosfmt formats both HTML macros. Run it with `leptosfmt.toml`, then run
+`cargo fmt --all`. Nix checks enforce both formatters and structural lint rules.
 
-Release tags must match the workspace version, for example `v0.1.0`, and point
-to a commit on `main`. The release workflow runs CI, publishes the macro crate
-before the runtime, then creates a GitHub release. Publishing uses the
-repository's `CARGO_REGISTRY_TOKEN` Actions secret. On failure, use GitHub's
-"Re-run failed jobs" option to keep successful jobs complete.
+Release tags must match the workspace version and point to a commit on `main`.
+The release workflow runs CI, publishes the macro crate before the runtime, then
+creates a GitHub release. Publishing uses the repository's
+`CARGO_REGISTRY_TOKEN` Actions secret.
 
 ## License
 

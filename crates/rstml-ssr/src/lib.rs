@@ -1,11 +1,11 @@
 //! Server-side HTML with escaped text, typed attributes, and fallible rendering.
 //!
 //! ```
-//! use rstml_ssr::{html, render};
+//! use rstml_ssr::html;
 //!
 //! let name = "<visitor>";
-//! let page = html! { <p>"Hello, "{name}</p> };
-//! assert_eq!(render(&page)?.as_str(), "<p>Hello, &lt;visitor&gt;</p>");
+//! let page = html! { <p>"Hello, "{name}</p> }?;
+//! assert_eq!(page.as_str(), "<p>Hello, &lt;visitor&gt;</p>");
 //! # Ok::<(), rstml_ssr::RenderError>(())
 //! ```
 //!
@@ -15,12 +15,23 @@
 use std::fmt;
 
 #[doc(hidden)]
-pub use rstml_ssr_macros::html as __html;
+pub use rstml_ssr_macros::{html as __html, write_html as __write_html};
 
+/// Render an owned document now. Returns `RenderResult<Markup>`.
+/// Interpolations are borrowed while writing, rather than captured for later.
+/// One-argument content closures write child components into the same scope.
 #[macro_export]
 macro_rules! html {
     ($($tokens:tt)*) => {
         $crate::__html! { ($crate) $($tokens)* }
+    };
+}
+
+/// Append a template to the current rendering scope. Errors must be propagated.
+#[macro_export]
+macro_rules! write_html {
+    ($output:expr, $($tokens:tt)*) => {
+        $crate::__write_html! { ($crate) ($output) $($tokens)* }
     };
 }
 
@@ -52,7 +63,7 @@ impl fmt::Display for RenderError {
 
 impl std::error::Error for RenderError {}
 
-pub type RenderResult = Result<(), RenderError>;
+pub type RenderResult<T = ()> = Result<T, RenderError>;
 
 enum EscapeContext {
     Text,
@@ -82,12 +93,43 @@ impl Output {
 
     /// Replace the document, retaining capacity. Returned errors clear partial output.
     pub fn render(&mut self, value: &(impl Render + ?Sized)) -> Result<&str, RenderError> {
+        self.scope(|output| value.render(output))
+    }
+
+    /// Replace the document using a one-shot component, retaining buffer capacity.
+    /// Errors clear partial output; the callback cannot return borrowed output.
+    pub fn scope(
+        &mut self,
+        component: impl FnOnce(&mut Self) -> RenderResult,
+    ) -> RenderResult<&str> {
         self.value.clear();
-        if let Err(error) = value.render(self) {
+        if let Err(error) = component(self) {
             self.value.clear();
             return Err(error);
         }
         Ok(self.value.as_str())
+    }
+
+    /// Execute a child component in this output without an intermediate buffer.
+    /// Components must propagate write errors and should not perform application mutations.
+    pub fn component(&mut self, component: impl FnOnce(&mut Self) -> RenderResult) -> RenderResult {
+        component(self)
+    }
+
+    /// Write a bounded slice through child components without collecting markup.
+    /// Oversized lists fail before invoking any callback.
+    pub fn each<'a, T>(
+        &mut self,
+        items: &'a [T],
+        mut component: impl FnMut(&mut Self, &'a T) -> RenderResult,
+    ) -> RenderResult {
+        if items.len() > ITEM_COUNT_MAX as usize {
+            return Err(RenderError::ItemLimit);
+        }
+        for item in items {
+            component(self, item)?;
+        }
+        Ok(())
     }
 
     fn append(&mut self, value: &str) -> RenderResult {
@@ -264,6 +306,16 @@ impl Render for () {
     }
 }
 
+/// Nested fallible components propagate errors instead of rendering error text.
+impl<T: Render> Render for RenderResult<T> {
+    fn render(&self, output: &mut Output) -> RenderResult {
+        match self {
+            Ok(value) => value.render(output),
+            Err(error) => Err(*error),
+        }
+    }
+}
+
 impl<T: Render> Render for Option<T> {
     fn render(&self, output: &mut Output) -> RenderResult {
         match self {
@@ -275,13 +327,7 @@ impl<T: Render> Render for Option<T> {
 
 impl<T: Render> Render for [T] {
     fn render(&self, output: &mut Output) -> RenderResult {
-        if self.len() > ITEM_COUNT_MAX as usize {
-            return Err(RenderError::ItemLimit);
-        }
-        for item in self {
-            item.render(output)?;
-        }
-        Ok(())
+        output.each(self, |output, item| item.render(output))
     }
 }
 
@@ -318,15 +364,7 @@ where
     R: Render,
     F: Fn(&'a T) -> R + 'a,
 {
-    fragment(move |output| {
-        if items.len() > ITEM_COUNT_MAX as usize {
-            return Err(RenderError::ItemLimit);
-        }
-        for item in items {
-            render_item(item).render(output)?;
-        }
-        Ok(())
-    })
+    fragment(move |output| output.each(items, |output, item| render_item(item).render(output)))
 }
 
 impl<F: Fn(&mut Output) -> RenderResult> Render for Fragment<F> {
@@ -357,6 +395,21 @@ impl Render for Markup {
     }
 }
 
+/// Execute a one-shot component and return its completed, owned document.
+pub fn render_scope(component: impl FnOnce(&mut Output) -> RenderResult) -> RenderResult<Markup> {
+    render_scope_with_limit(component, OUTPUT_SIZE_BYTES_MAX)
+}
+
+/// Execute components within one shared UTF-8 byte budget.
+pub fn render_scope_with_limit(
+    component: impl FnOnce(&mut Output) -> RenderResult,
+    limit_bytes: u32,
+) -> RenderResult<Markup> {
+    let mut output = Output::new(limit_bytes);
+    output.scope(component)?;
+    Ok(Markup(output.value))
+}
+
 /// Produce owned markup with the default output budget. Errors return no document.
 pub fn render(value: &(impl Render + ?Sized)) -> Result<Markup, RenderError> {
     render_with_limit(value, OUTPUT_SIZE_BYTES_MAX)
@@ -367,9 +420,7 @@ pub fn render_with_limit(
     value: &(impl Render + ?Sized),
     limit_bytes: u32,
 ) -> Result<Markup, RenderError> {
-    let mut output = Output::new(limit_bytes);
-    output.render(value)?;
-    Ok(Markup(output.value))
+    render_scope_with_limit(|output| value.render(output), limit_bytes)
 }
 
 /// `false` and `None` omit the entire attribute; empty strings remain present.

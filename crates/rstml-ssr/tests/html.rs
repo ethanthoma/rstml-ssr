@@ -1,6 +1,9 @@
-use rstml_ssr::{Render, RenderError, TrustedHtml, html, render, render_with_limit};
+use rstml_ssr::{
+    Markup, RenderError, RenderResult, TrustedHtml, fragment, html, render, render_with_limit,
+    write_html,
+};
 
-fn greeting(name: String) -> impl Render {
+fn greeting(name: String) -> RenderResult<Markup> {
     html! { <p title={name}>{name}{name}</p> }
 }
 
@@ -108,16 +111,18 @@ fn optional_and_collected_content_preserves_order_and_escaping() {
 fn lazy_content_evaluates_only_selected_branches_at_render_time() {
     let selected = std::cell::Cell::new(false);
     let calls = std::cell::Cell::new(0_u32);
-    let page = html! {
-        {|| {
-            if selected.get() {
-                calls.set(calls.get() + 1);
-                html! { <b>"selected"</b> }
-            } else {
-                "fallback"
-            }
-        }}
-    };
+    let page = fragment(|output| {
+        write_html! { output,
+            {|| {
+                if selected.get() {
+                    calls.set(calls.get() + 1);
+                    html! { <b>"selected"</b> }
+                } else {
+                    "fallback"
+                }
+            }}
+        }
+    });
     assert_eq!(calls.get(), 0);
     assert_eq!(render(&page).unwrap().as_str(), "fallback");
     assert_eq!(calls.get(), 0);
@@ -138,18 +143,20 @@ fn lazy_content_evaluates_only_selected_branches_at_render_time() {
 fn typed_lazy_closures_preserve_rust_return_types() {
     let selected = std::cell::Cell::new(false);
     let calls = std::cell::Cell::new(0_u32);
-    let page = html! {
-        {|| -> &'static str {
-            calls.set(calls.get() + 1);
-            if selected.get() { "<&>" } else { "hidden" }
-        }}
-        {|| -> &'static str {
-            match selected.get() {
-                true => "shown",
-                false => "fallback",
-            }
-        }}
-    };
+    let page = fragment(|output| {
+        write_html! { output,
+            {|| -> &'static str {
+                calls.set(calls.get() + 1);
+                if selected.get() { "<&>" } else { "hidden" }
+            }}
+            {|| -> &'static str {
+                match selected.get() {
+                    true => "shown",
+                    false => "fallback",
+                }
+            }}
+        }
+    });
     assert_eq!(calls.get(), 0);
     for (index, visible) in [false, true, false].into_iter().enumerate() {
         selected.set(visible);

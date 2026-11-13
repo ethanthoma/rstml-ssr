@@ -45,9 +45,7 @@ fn serialized_json_cannot_escape_attributes_or_script_elements() {
 #[test]
 fn contact_form_matches_maud_dom_and_decoded_datastar_values() {
     let expected = maud_fixture::contact_form().into_string();
-    let actual = render(&rstml_fixture::contact_form())
-        .unwrap()
-        .into_string();
+    let actual = rstml_fixture::contact_form().unwrap().into_string();
     assert_eq!(
         Html::parse_fragment(&actual).html(),
         Html::parse_fragment(&expected).html()
@@ -89,13 +87,9 @@ fn shared_page_shell_matches_maud_dom() {
             };
             let expected =
                 maud_fixture::page(&assets, meta, maud_fixture::contact_form()).into_string();
-            let actual = render(&rstml_fixture::page(
-                &assets,
-                meta,
-                rstml_fixture::contact_form(),
-            ))
-            .unwrap()
-            .into_string();
+            let actual = rstml_fixture::page(&assets, meta, rstml_fixture::contact_form())
+                .unwrap()
+                .into_string();
             assert_eq!(
                 Html::parse_document(&actual).html(),
                 Html::parse_document(&expected).html(),

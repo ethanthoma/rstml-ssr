@@ -6,23 +6,27 @@ extern crate renamed;
 extern crate std;
 
 mod forwarded {
-    pub use crate::renamed::html as template;
+    pub use crate::renamed::{html as template, write_html as append};
 }
 
-fn greeting(name: &str) -> impl renamed::Render + '_ {
+fn greeting(name: &str) -> renamed::RenderResult<renamed::Markup> {
     forwarded::template! { <p title={name}>{name}</p> }
+}
+
+fn component(output: &mut renamed::Output, name: &str) -> renamed::RenderResult {
+    forwarded::append! { output, {greeting(name)} }
 }
 
 fn main() {
     let page = renamed::html! {
         <main>
-            {greeting("Ada")}
+            {|output| component(output, "Ada")}
             {if true { renamed::html! { <b>"yes"</b> } } else { "no" }}
             {match 1_u32 { 0 => renamed::html! { <i/> }, 1 => "one", _ => 2_u32 }}
         </main>
-    };
+    }.unwrap();
     std::assert_eq!(
-        renamed::render(&page).unwrap().as_str(),
+        page.as_str(),
         "<main><p title=\"Ada\">Ada</p><b>yes</b>one</main>"
     );
 }
