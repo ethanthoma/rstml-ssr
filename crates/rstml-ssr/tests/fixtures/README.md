@@ -19,13 +19,15 @@ or server integrations.
 Comparisons use Maud 0.27.0, revision
 `fb193d31462eea63eabfa705c93ccc56f5bb1eac`, and scraper 0.29.0, revision
 `149ae5c9dfbaca2e6b92470018fedc95ab254d5d` (html5ever for HTML5 parsing). Maud,
-scraper, trybuild, serde_json, and tiny_http are test dependencies only.
+scraper, trybuild, serde_json, tiny_http, and hegeltest are test dependencies
+only.
 
 The form and eight shell variants produce the same parsed HTML. The shell cases
 cover home/contact/needle/report URLs, development assets, draft helpers,
-optional JSON-LD, extra stylesheets, and adversarial metadata. Another 1,331
-text/attribute combinations compare parsed output and decoded Datastar values.
-The `website` test checks parsing and serialization without executing scripts.
+optional JSON-LD, extra stylesheets, and adversarial metadata. Hegel generates
+Unicode text/attribute combinations to compare parsed output and decoded
+Datastar values, and generates JSON payloads and SSE fragment content. The
+`website` test checks parsing and serialization without executing scripts.
 
 Intentional byte differences are tested explicitly: present valueless attributes
 use `=""`, and quotes in text nodes stay literal. Both parse identically to
@@ -106,6 +108,19 @@ boolean behavior and these explicit ARIA strings.
   never raw HTML. Their own expression/schema validation belongs to the caller.
 
 Run `nix develop --command cargo test --test website` to reproduce these checks.
+Hegel 0.53.1 also checks escaping across fragment boundaries and output byte
+limits in `tests/render.rs`, with strings bounded to 256 characters. The Maud
+comparison excludes NUL (rejected by this renderer) and CR (normalized by Maud);
+separate regression tests cover both differences. The exhaustive Unicode scan,
+compile-fail checks, and allocation-failure tests remain deterministic. Run more
+generated cases with
+`nix develop --command env HEGEL_TEST_CASES=1000 cargo test --test render --test website`.
+Hegel shrinks failures and saves examples in its local database for replay;
+`HEGEL_DATABASE=disabled` disables persistence for an isolated run. An isolated
+negative control changed ampersand escaping to emit a literal `&`. The Hegel
+escaping property failed and shrank the input to `"&"`; the mutation was
+discarded.
+
 Runtime unit tests inject reservation failures at every growth point in their
 rendering fixtures. The test-only hook forces capacity overflow in
 `try_reserve_exact`, exercising reservation-error mapping and propagation

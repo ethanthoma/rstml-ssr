@@ -1,7 +1,32 @@
+use hegel::{TestCase, generators};
 use rstml_ssr::{Output, Render, RenderError, TrustedHtml, component, render, render_with_limit};
 
+#[hegel::test]
+fn unicode_escaping_and_fragment_boundaries(test_case: TestCase) {
+    let input = test_case.draw(generators::text().exclude_characters("\0").max_size(256));
+    let expected = input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('\r', "&#13;");
+    assert_eq!(render(&input).unwrap().as_str(), expected);
+    let pieces = component(|output| {
+        for character in input.chars() {
+            let mut bytes = [0; 4];
+            output.text(character.encode_utf8(&mut bytes))?;
+        }
+        Ok(())
+    });
+    assert_eq!(render(&pieces).unwrap().as_str(), expected);
+    let attribute = component(|output| output.attribute("data-on:submit", &input));
+    assert_eq!(
+        render(&attribute).unwrap().as_str(),
+        format!(" data-on:submit=\"{}\"", expected.replace('"', "&quot;"))
+    );
+}
+
 #[test]
-fn generated_unicode_escaping_and_fragment_boundaries() {
+fn exhaustive_unicode_escaping_and_fragment_boundaries() {
     // Every valid Unicode scalar, in bounded batches, including all ASCII hazards.
     for batch in 0..4352_u32 {
         let input: String = (batch * 256..(batch + 1) * 256)
@@ -62,11 +87,16 @@ fn omission_composition_and_numeric_contracts() {
     );
 }
 
-#[test]
-fn byte_limits_include_escaping_and_nested_output() {
-    let input = "é<&\"";
+#[hegel::test]
+fn byte_limits_include_escaping_and_nested_output(test_case: TestCase) {
+    let input = test_case.draw(generators::text().exclude_characters("\0").max_size(256));
     let escaped = render(&input).unwrap();
-    for limit in 0..32 {
+    for limit in [
+        0,
+        escaped.as_str().len() as u32,
+        escaped.as_str().len() as u32 + 1,
+        test_case.draw(generators::integers::<u32>().max_value(2048)),
+    ] {
         let result = render_with_limit(&input, limit);
         if (limit as usize) < escaped.as_str().len() {
             assert_eq!(result, Err(RenderError::OutputLimit));
@@ -78,10 +108,12 @@ fn byte_limits_include_escaping_and_nested_output() {
         escaped.render(output)?;
         escaped.render(output)
     });
-    assert_eq!(
-        render_with_limit(&nested, 2 * escaped.as_str().len() as u32 - 1),
-        Err(RenderError::OutputLimit)
-    );
+    if !input.is_empty() {
+        assert_eq!(
+            render_with_limit(&nested, 2 * escaped.as_str().len() as u32 - 1),
+            Err(RenderError::OutputLimit)
+        );
+    }
     assert_eq!(render_with_limit(&"", 0).unwrap().as_str(), "");
     assert_eq!(
         render_with_limit(&u128::MAX, 1),

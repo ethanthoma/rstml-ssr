@@ -1,12 +1,15 @@
 mod fixtures;
 
 use fixtures::{Assets, PageData, maud_fixture, rstml_fixture};
+use hegel::{TestCase, generators};
 use rstml_ssr::{html, render};
 use scraper::{Html, Selector};
 
-#[test]
-fn serialized_json_cannot_escape_attributes_or_script_elements() {
+#[hegel::test]
+fn serialized_json_cannot_escape_attributes_or_script_elements(test_case: TestCase) {
+    let generated = test_case.draw(generators::text().max_size(256));
     for payload in [
+        generated.as_str(),
         "x onmouseover=alert(1) y",
         "\"><img src=x onerror=alert(1)>",
         "</script><script>alert(1)</script>",
@@ -100,41 +103,29 @@ fn shared_page_shell_matches_maud_dom() {
     }
 }
 
-#[test]
-fn generated_text_and_attributes_match_maud_after_html_parsing() {
-    let alphabet = [
-        "", "&", "<", ">", "\"", "'", "é", "🦀", "\n", "\t", "&quot;",
-    ];
-    for first in alphabet {
-        for second in alphabet {
-            for third in alphabet {
-                let input = format!("{first}{second}{third}");
-                let expected = maud::html! { div data-on:submit=(input) { (input) } }.into_string();
-                let actual = render(&html! { <div data-on:submit={input}>{input}</div> })
-                    .unwrap()
-                    .into_string();
-                let document = Html::parse_fragment(&actual);
-                assert_eq!(document.html(), Html::parse_fragment(&expected).html());
-                let element = document
-                    .select(&Selector::parse("div").unwrap())
-                    .next()
-                    .unwrap();
-                assert_eq!(
-                    element.value().attr("data-on:submit"),
-                    Some(format!("{first}{second}{third}").as_str())
-                );
-                assert_eq!(
-                    element.text().collect::<String>(),
-                    format!("{first}{second}{third}")
-                );
-            }
-        }
-    }
+#[hegel::test]
+fn generated_text_and_attributes_match_maud_after_html_parsing(test_case: TestCase) {
+    // Maud leaves carriage returns for the HTML parser to normalize.
+    let input = test_case.draw(generators::text().exclude_characters("\0\r").max_size(256));
+    let expected = maud::html! { div data-on:submit=(input) { (input) } }.into_string();
+    let actual = render(&html! { <div data-on:submit={input}>{input}</div> })
+        .unwrap()
+        .into_string();
+    let document = Html::parse_fragment(&actual);
+    assert_eq!(document.html(), Html::parse_fragment(&expected).html());
+    let element = document
+        .select(&Selector::parse("div").unwrap())
+        .next()
+        .unwrap();
+    assert_eq!(element.value().attr("data-on:submit"), Some(input.as_str()));
+    assert_eq!(element.text().collect::<String>(), input);
 }
 
-#[test]
-fn multiline_fragments_survive_the_website_patch_framing() {
+#[hegel::test]
+fn multiline_fragments_survive_the_website_patch_framing(test_case: TestCase) {
+    let generated = test_case.draw(generators::text().exclude_characters("\0").max_size(256));
     for text in [
+        generated.as_str(),
         "",
         "first\nsecond",
         "\n",
