@@ -4,8 +4,12 @@
 # Repository metadata
 !/.gitignore
 !/README.md
+!/biome.json
 !/leptosfmt.toml
+!/rustfmt.toml
 !/secretspec.toml
+!/taplo.toml
+!/.yamlfmt
 !/LICENSE-MIT
 !/LICENSE-APACHE
 !/crates/*/LICENSE-MIT
@@ -31,5 +35,6 @@
 !/.ast-grep/utils/*.yml
 
 # Nix
+!/.envrc
 !/flake.nix
 !/flake.lock

@@ -37,6 +37,12 @@
           ...
         }:
         let
+          rust_package = {
+            pname = "rstml-ssr";
+            version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
+            src = pkgs.lib.cleanSource self;
+            cargoLock.lockFile = ./Cargo.lock;
+          };
           devshell_packages = [
             pkgs.stdenv.cc
             pkgs.cargo
@@ -55,20 +61,51 @@
             pkgs.python3Packages.mdformat
             pkgs.biome
             pkgs.yamlfmt
+            pkgs.taplo
           ];
         in
         {
-          packages.default = pkgs.rustPlatform.buildRustPackage {
-            pname = "rstml-ssr";
-            version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
-            src = pkgs.lib.cleanSource self;
-            cargoLock.lockFile = ./Cargo.lock;
-            cargoBuildFlags = [ "--workspace" ];
-            cargoTestFlags = [ "--workspace" ];
-          };
+          packages.default = pkgs.rustPlatform.buildRustPackage (
+            rust_package
+            // {
+              cargoBuildFlags = [ "--workspace" ];
+              cargoTestFlags = [ "--workspace" ];
+            }
+          );
 
           checks = {
             build = self'.packages.default;
+            clippy = pkgs.rustPlatform.buildRustPackage (
+              rust_package
+              // {
+                pname = "rstml-ssr-clippy";
+                nativeBuildInputs = [ pkgs.clippy ];
+                buildPhase = ''
+                  runHook preBuild
+                  cargo clippy --offline --workspace --all-targets -- -D warnings
+                  runHook postBuild
+                '';
+                doCheck = false;
+                installPhase = ''
+                  touch "$out"
+                '';
+              }
+            );
+            rustdoc = pkgs.rustPlatform.buildRustPackage (
+              rust_package
+              // {
+                pname = "rstml-ssr-rustdoc";
+                buildPhase = ''
+                  runHook preBuild
+                  RUSTDOCFLAGS="-Dwarnings" cargo doc --offline --workspace --no-deps
+                  runHook postBuild
+                '';
+                doCheck = false;
+                installPhase = ''
+                  touch "$out"
+                '';
+              }
+            );
             policy = pkgs.runCommand "rstml-ssr-policy" { nativeBuildInputs = [ pkgs.ast-grep ]; } ''
               cd ${self}
               ast-grep test --config .ast-grep/sgconfig.yml --skip-snapshot-tests
@@ -98,6 +135,7 @@
                     pkgs.python3Packages.mdformat
                     pkgs.biome
                     pkgs.yamlfmt
+                    pkgs.taplo
                     pkgs.actionlint
                   ];
                 }
@@ -109,12 +147,16 @@
                   leptosfmt --check --config-file leptosfmt.toml \
                     'crates/rstml-ssr/src/*.rs' 'crates/rstml-ssr/tests/*.rs' \
                     crates/rstml-ssr/tests/fixtures/rstml_fixture.rs \
-                    crates/rstml-ssr/tests/pass/composition.rs
+                    crates/rstml-ssr/tests/fixtures/renamed.rs \
+                    crates/rstml-ssr/tests/pass/composition.rs \
+                    crates/rstml-ssr-macros/src/tests.rs
                   nixfmt --check flake.nix
                   mdformat --check --wrap 80 --number README.md crates/rstml-ssr-macros/README.md crates/rstml-ssr/tests/fixtures/README.md
-                  biome format crates/rstml-ssr/tests/fixtures/browser-checks.js
+                  biome format biome.json crates/rstml-ssr/tests/fixtures/browser-checks.js
                   yamlfmt -lint .ast-grep
                   yamlfmt -lint .github/workflows
+                  yamlfmt -lint .yamlfmt
+                  taplo fmt --check Cargo.toml crates/rstml-ssr/Cargo.toml crates/rstml-ssr-macros/Cargo.toml leptosfmt.toml rustfmt.toml secretspec.toml taplo.toml
                   actionlint .github/workflows/*.yml
                   touch "$out"
                 '';

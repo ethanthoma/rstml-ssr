@@ -24,9 +24,5 @@ jobs:
         run: |
           nix develop --command git merge-base --is-ancestor "$GITHUB_SHA" origin/main
           test "$GITHUB_REF_NAME" = "v$(nix eval --raw .#packages.x86_64-linux.default.version)"
-      - name: Build, test, and check formatting
+      - name: Build, test, lint, and check formatting
         run: nix flake check --show-trace
-      - name: Clippy
-        run: nix develop --command cargo clippy --workspace --all-targets -- -D warnings
-      - name: Rustdoc
-        run: nix develop --command env RUSTDOCFLAGS=-Dwarnings cargo doc --workspace --no-deps
