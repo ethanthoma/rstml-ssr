@@ -1,28 +1,64 @@
 {
   description = "Minimal server-side HTML rendering with rstml";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
+    flake-parts = {
+      url = "github:hercules-ci/flake-parts";
+      inputs.nixpkgs-lib.follows = "nixpkgs";
+    };
+    devshell = {
+      url = "github:numtide/devshell";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
 
   outputs =
-    { self, nixpkgs }:
-    let
+    inputs@{
+      self,
+      flake-parts,
+      devshell,
+      ...
+    }:
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      imports = [ devshell.flakeModule ];
+
       systems = [
         "x86_64-linux"
         "aarch64-linux"
         "x86_64-darwin"
         "aarch64-darwin"
       ];
-      for_all_systems = nixpkgs.lib.genAttrs systems;
-      packages_for = system: import nixpkgs { inherit system; };
-    in
-    {
-      packages = for_all_systems (
-        system:
+
+      perSystem =
+        {
+          pkgs,
+          self',
+          ...
+        }:
         let
-          pkgs = packages_for system;
+          devshell_packages = [
+            pkgs.stdenv.cc
+            pkgs.cargo
+            pkgs.rustc
+            pkgs.rustfmt
+            pkgs.leptosfmt
+            pkgs.secretspec
+            pkgs.git
+            pkgs.gh
+            pkgs.actionlint
+            pkgs.ripgrep
+            pkgs.clippy
+            pkgs.ast-grep
+            pkgs.rust-analyzer
+            pkgs.nixfmt
+            pkgs.python3Packages.mdformat
+            pkgs.biome
+            pkgs.yamlfmt
+          ];
         in
         {
-          default = pkgs.rustPlatform.buildRustPackage {
+          packages.default = pkgs.rustPlatform.buildRustPackage {
             pname = "rstml-ssr";
             version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
             src = pkgs.lib.cleanSource self;
@@ -30,101 +66,77 @@
             cargoBuildFlags = [ "--workspace" ];
             cargoTestFlags = [ "--workspace" ];
           };
-        }
-      );
 
-      checks = for_all_systems (
-        system:
-        let
-          pkgs = packages_for system;
-        in
-        {
-          build = self.packages.${system}.default;
-          policy = pkgs.runCommand "rstml-ssr-policy" { nativeBuildInputs = [ pkgs.ast-grep ]; } ''
-            cd ${self}
-            ast-grep test --config .ast-grep/sgconfig.yml --skip-snapshot-tests
-            ast-grep scan --config .ast-grep/sgconfig.yml crates
-            touch "$out"
-          '';
-          readme =
-            let
-              runtime = builtins.fromTOML (builtins.readFile ./crates/rstml-ssr/Cargo.toml);
-              macros = builtins.fromTOML (builtins.readFile ./crates/rstml-ssr-macros/Cargo.toml);
-            in
-            assert runtime.package.readme == "../../README.md";
-            assert macros.package.readme == "README.md";
-            pkgs.runCommand "rstml-ssr-package-readme" { } ''
-              test -s ${self}/README.md
-              test -s ${self}/crates/rstml-ssr-macros/README.md
+          checks = {
+            build = self'.packages.default;
+            policy = pkgs.runCommand "rstml-ssr-policy" { nativeBuildInputs = [ pkgs.ast-grep ]; } ''
+              cd ${self}
+              ast-grep test --config .ast-grep/sgconfig.yml --skip-snapshot-tests
+              ast-grep scan --config .ast-grep/sgconfig.yml crates
               touch "$out"
             '';
-          formatting =
-            pkgs.runCommand "rstml-ssr-formatting"
-              {
-                nativeBuildInputs = [
-                  pkgs.cargo
-                  pkgs.rustfmt
-                  pkgs.leptosfmt
-                  pkgs.nixfmt
-                  pkgs.python3Packages.mdformat
-                  pkgs.biome
-                  pkgs.yamlfmt
-                  pkgs.actionlint
-                ];
-              }
-              ''
-                cp -r ${self} source
-                chmod -R u+w source
-                cd source
-                cargo fmt --all -- --check
-                leptosfmt --check --config-file leptosfmt.toml \
-                  'crates/rstml-ssr/src/*.rs' 'crates/rstml-ssr/tests/*.rs' \
-                  crates/rstml-ssr/tests/fixtures/rstml_fixture.rs \
-                  crates/rstml-ssr/tests/pass/composition.rs
-                nixfmt --check flake.nix
-                mdformat --check --wrap 80 --number README.md crates/rstml-ssr-macros/README.md crates/rstml-ssr/tests/fixtures/README.md
-                biome format crates/rstml-ssr/tests/fixtures/browser-checks.js
-                yamlfmt -lint .ast-grep
-                yamlfmt -lint .github/workflows
-                actionlint .github/workflows/*.yml
+            readme =
+              let
+                runtime = builtins.fromTOML (builtins.readFile ./crates/rstml-ssr/Cargo.toml);
+                macros = builtins.fromTOML (builtins.readFile ./crates/rstml-ssr-macros/Cargo.toml);
+              in
+              assert runtime.package.readme == "../../README.md";
+              assert macros.package.readme == "README.md";
+              pkgs.runCommand "rstml-ssr-package-readme" { } ''
+                test -s ${self}/README.md
+                test -s ${self}/crates/rstml-ssr-macros/README.md
                 touch "$out"
               '';
-        }
-      );
-
-      devShells = for_all_systems (
-        system:
-        let
-          pkgs = packages_for system;
-        in
-        {
-          default = pkgs.mkShell {
-            packages = [
-              pkgs.cargo
-              pkgs.rustc
-              pkgs.rustfmt
-              pkgs.leptosfmt
-              pkgs.secretspec
-              pkgs.git
-              pkgs.gh
-              pkgs.actionlint
-              pkgs.ripgrep
-              pkgs.clippy
-              pkgs.ast-grep
-              pkgs.rust-analyzer
-              pkgs.nixfmt
-              pkgs.python3Packages.mdformat
-              pkgs.biome
-              pkgs.yamlfmt
-            ];
+            formatting =
+              pkgs.runCommand "rstml-ssr-formatting"
+                {
+                  nativeBuildInputs = [
+                    pkgs.cargo
+                    pkgs.rustfmt
+                    pkgs.leptosfmt
+                    pkgs.nixfmt
+                    pkgs.python3Packages.mdformat
+                    pkgs.biome
+                    pkgs.yamlfmt
+                    pkgs.actionlint
+                  ];
+                }
+                ''
+                  cp -r ${self} source
+                  chmod -R u+w source
+                  cd source
+                  cargo fmt --all -- --check
+                  leptosfmt --check --config-file leptosfmt.toml \
+                    'crates/rstml-ssr/src/*.rs' 'crates/rstml-ssr/tests/*.rs' \
+                    crates/rstml-ssr/tests/fixtures/rstml_fixture.rs \
+                    crates/rstml-ssr/tests/pass/composition.rs
+                  nixfmt --check flake.nix
+                  mdformat --check --wrap 80 --number README.md crates/rstml-ssr-macros/README.md crates/rstml-ssr/tests/fixtures/README.md
+                  biome format crates/rstml-ssr/tests/fixtures/browser-checks.js
+                  yamlfmt -lint .ast-grep
+                  yamlfmt -lint .github/workflows
+                  actionlint .github/workflows/*.yml
+                  touch "$out"
+                '';
           };
-          browser = pkgs.mkShell {
-            inputsFrom = [ self.devShells.${system}.default ];
-            packages = pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.chromium ];
-          };
-        }
-      );
 
-      formatter = for_all_systems (system: (packages_for system).nixfmt);
+          devshells = {
+            default = {
+              devshell = {
+                name = "rstml-ssr";
+                packages = devshell_packages;
+              };
+            };
+            browser = {
+              devshell = {
+                name = "rstml-ssr-browser";
+                packages =
+                  devshell_packages ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.chromium ];
+              };
+            };
+          };
+
+          formatter = pkgs.nixfmt;
+        };
     };
 }
