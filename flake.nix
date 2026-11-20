@@ -151,7 +151,7 @@
                     crates/rstml-ssr/tests/pass/composition.rs \
                     crates/rstml-ssr-macros/src/tests.rs
                   nixfmt --check flake.nix
-                  mdformat --check --wrap 80 --number README.md crates/rstml-ssr-macros/README.md crates/rstml-ssr/tests/fixtures/README.md
+                  mdformat --check --wrap 80 --number CHANGELOG.md README.md crates/rstml-ssr-macros/README.md crates/rstml-ssr/tests/fixtures/README.md
                   biome format biome.json crates/rstml-ssr/tests/fixtures/browser-checks.js
                   yamlfmt -lint .ast-grep
                   yamlfmt -lint .github/workflows

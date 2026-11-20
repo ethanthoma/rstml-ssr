@@ -3,6 +3,7 @@
 
 # Repository metadata
 !/.gitignore
+!/CHANGELOG.md
 !/README.md
 !/biome.json
 !/leptosfmt.toml
