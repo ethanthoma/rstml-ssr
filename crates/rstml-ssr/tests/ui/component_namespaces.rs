@@ -5,7 +5,8 @@ fn Path() -> RenderResult { html! { <path d="M0 0L1 1" /> } }
 
 #[component]
 fn Foreign(children: rstml_ssr::Children) -> RenderResult {
-    html! { <svg>{children()}</svg> }
+    html! { <svg>{children()}</svg> }?;
+    html! { <math>{children()}</math> }
 }
 
 fn main() {

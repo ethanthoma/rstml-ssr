@@ -1,28 +1,28 @@
-error: this element requires audited TrustedHtml in the initial API
+error: this element requires audited TrustedHtml
  --> tests/ui/raw_contexts.rs:5:22
   |
 5 |     let _ = html! { <xmp/> };
   |                      ^^^
 
-error: this element requires audited TrustedHtml in the initial API
+error: this element requires audited TrustedHtml
  --> tests/ui/raw_contexts.rs:6:22
   |
 6 |     let _ = html! { <iframe/> };
   |                      ^^^^^^
 
-error: this element requires audited TrustedHtml in the initial API
+error: this element requires audited TrustedHtml
  --> tests/ui/raw_contexts.rs:7:22
   |
 7 |     let _ = html! { <noembed/> };
   |                      ^^^^^^^
 
-error: this element requires audited TrustedHtml in the initial API
+error: this element requires audited TrustedHtml
  --> tests/ui/raw_contexts.rs:8:22
   |
 8 |     let _ = html! { <noframes/> };
   |                      ^^^^^^^^
 
-error: this element requires audited TrustedHtml in the initial API
+error: this element requires audited TrustedHtml
  --> tests/ui/raw_contexts.rs:9:22
   |
 9 |     let _ = html! { <plaintext/> };

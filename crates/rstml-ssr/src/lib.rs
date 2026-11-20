@@ -133,7 +133,7 @@ impl Output {
     }
 
     /// Replace the document, retaining capacity. Returned errors clear partial output.
-    pub fn render(&mut self, value: &(impl Render + ?Sized)) -> Result<&str, RenderError> {
+    pub fn render(&mut self, value: &(impl Render + ?Sized)) -> RenderResult<&str> {
         self.scope(|output| value.render(output))
     }
 
@@ -474,15 +474,12 @@ pub fn render_scope_with_limit(
 }
 
 /// Produce owned markup with the default output budget. Errors return no document.
-pub fn render(value: &(impl Render + ?Sized)) -> Result<Markup, RenderError> {
+pub fn render(value: &(impl Render + ?Sized)) -> RenderResult<Markup> {
     render_with_limit(value, OUTPUT_SIZE_BYTES_MAX)
 }
 
 /// Produce owned markup with an explicit UTF-8 byte budget.
-pub fn render_with_limit(
-    value: &(impl Render + ?Sized),
-    limit_bytes: u32,
-) -> Result<Markup, RenderError> {
+pub fn render_with_limit(value: &(impl Render + ?Sized), limit_bytes: u32) -> RenderResult<Markup> {
     render_scope_with_limit(|output| value.render(output), limit_bytes)
 }
 

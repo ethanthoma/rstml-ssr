@@ -58,6 +58,14 @@ fn parser_budgets_reject_oversized_templates() {
     let literal = "x".repeat(524_288);
     let error = expand(quote!(#literal #literal)).unwrap_err();
     assert!(error.to_string().contains("one MiB"));
+
+    let mut elements = quote!("leaf");
+    for _ in 0..64 {
+        elements = quote!(<div>#elements</div>);
+    }
+    assert!(expand(elements.clone()).is_ok());
+    let error = expand(quote!(<div>#elements</div>)).unwrap_err();
+    assert!(error.to_string().contains("64 levels"));
 }
 
 #[test]

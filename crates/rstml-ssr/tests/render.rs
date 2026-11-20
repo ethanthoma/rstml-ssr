@@ -1,15 +1,13 @@
 use hegel::{TestCase, generators};
 use rstml_ssr::{Output, Render, RenderError, TrustedHtml, component, render, render_with_limit};
 
-#[hegel::test]
-fn unicode_escaping_and_fragment_boundaries(test_case: TestCase) {
-    let input = test_case.draw(generators::text().exclude_characters("\0").max_size(256));
+fn assert_unicode_escaping_and_boundaries(input: &str) {
     let expected = input
         .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('\r', "&#13;");
-    assert_eq!(render(&input).unwrap().as_str(), expected);
+    assert_eq!(render(input).unwrap().as_str(), expected);
     let pieces = component(|output| {
         for character in input.chars() {
             let mut bytes = [0; 4];
@@ -18,11 +16,17 @@ fn unicode_escaping_and_fragment_boundaries(test_case: TestCase) {
         Ok(())
     });
     assert_eq!(render(&pieces).unwrap().as_str(), expected);
-    let attribute = component(|output| output.attribute("data-on:submit", &input));
+    let attribute = component(|output| output.attribute("data-on:submit", input));
     assert_eq!(
         render(&attribute).unwrap().as_str(),
         format!(" data-on:submit=\"{}\"", expected.replace('"', "&quot;"))
     );
+}
+
+#[hegel::test]
+fn unicode_escaping_and_fragment_boundaries(test_case: TestCase) {
+    let input = test_case.draw(generators::text().exclude_characters("\0").max_size(256));
+    assert_unicode_escaping_and_boundaries(&input);
 }
 
 #[test]
@@ -33,25 +37,7 @@ fn exhaustive_unicode_escaping_and_fragment_boundaries() {
             .filter_map(char::from_u32)
             .filter(|character| *character != '\0')
             .collect();
-        let expected = input
-            .replace('&', "&amp;")
-            .replace('<', "&lt;")
-            .replace('>', "&gt;")
-            .replace('\r', "&#13;");
-        assert_eq!(render(&input).unwrap().as_str(), expected);
-        let pieces = component(|output| {
-            for character in input.chars() {
-                let mut bytes = [0; 4];
-                output.text(character.encode_utf8(&mut bytes))?;
-            }
-            Ok(())
-        });
-        assert_eq!(render(&pieces).unwrap().as_str(), expected);
-        let attribute = component(|output| output.attribute("data-on:submit", &input));
-        assert_eq!(
-            render(&attribute).unwrap().as_str(),
-            format!(" data-on:submit=\"{}\"", expected.replace('"', "&quot;"))
-        );
+        assert_unicode_escaping_and_boundaries(&input);
     }
 }
 

@@ -33,6 +33,12 @@ enum EscapeContext {
 }
 
 #[derive(Clone, Copy)]
+enum RawTextElement {
+    Script,
+    Style,
+}
+
+#[derive(Clone, Copy)]
 enum MarkupContext {
     Html,
     Svg,
@@ -40,6 +46,8 @@ enum MarkupContext {
     MathText,
     MathAnnotation,
 }
+
+const TEMPLATE_DEPTH_MAX: u32 = 64;
 
 #[proc_macro]
 pub fn html(input: TokenStream) -> TokenStream {
@@ -69,15 +77,16 @@ fn expand(input: Tokens) -> syn::Result<Tokens> {
     let input: Tokens = tokens.collect();
     check_input(input.clone(), 0, &mut InputBudget::default())?;
     let (destination, input) = destination(input);
-    let config = ParserConfig::new().always_self_closed_elements(VOID_ELEMENTS.into());
-    let nodes = Parser::new(config).parse_simple(input)?;
+    let parser_configuration =
+        ParserConfig::new().always_self_closed_elements(VOID_ELEMENTS.into());
+    let nodes = Parser::new(parser_configuration).parse_simple(input)?;
     let mut generator = Generator {
         runtime,
         output: Ident::new("__rstml_output", Span::mixed_site()),
         body: Tokens::new(),
         pending: String::new(),
     };
-    generator.nodes(&nodes, MarkupContext::Html)?;
+    generator.nodes(&nodes, MarkupContext::Html, 0)?;
     generator.flush();
     let Generator {
         runtime,
@@ -186,16 +195,22 @@ impl Generator {
         }
     }
 
-    fn nodes(&mut self, nodes: &[Node], namespace: MarkupContext) -> syn::Result<()> {
+    fn nodes(&mut self, nodes: &[Node], namespace: MarkupContext, depth: u32) -> syn::Result<()> {
+        if depth > TEMPLATE_DEPTH_MAX {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "html! element nesting exceeds 64 levels",
+            ));
+        }
         for node in nodes {
             match node {
-                Node::Element(element) => self.element(element, namespace)?,
+                Node::Element(element) => self.element(element, namespace, depth + 1)?,
                 Node::Text(text) => self.pending.push_str(&escaped(
                     &text.value_string(),
                     EscapeContext::Text,
                     text.value.span(),
                 )?),
-                Node::Fragment(fragment) => self.nodes(&fragment.children, namespace)?,
+                Node::Fragment(fragment) => self.nodes(&fragment.children, namespace, depth + 1)?,
                 Node::Block(block) => {
                     let expression = unblock(syn::parse2(block.to_token_stream())?);
                     if let Expr::Closure(callback) = &expression {
@@ -248,6 +263,7 @@ impl Generator {
         element: &NodeElement<Infallible>,
         path: &syn::ExprPath,
         namespace: MarkupContext,
+        depth: u32,
     ) -> syn::Result<()> {
         if !matches!(namespace, MarkupContext::Html) {
             return Err(syn::Error::new_spanned(
@@ -306,7 +322,7 @@ impl Generator {
                 ));
             }
             let outer = std::mem::take(&mut self.body);
-            self.nodes(&element.children, namespace)?;
+            self.nodes(&element.children, namespace, depth)?;
             self.flush();
             let body = std::mem::replace(&mut self.body, outer);
             let output = &self.output;
@@ -326,6 +342,7 @@ impl Generator {
         &mut self,
         element: &NodeElement<Infallible>,
         namespace: MarkupContext,
+        depth: u32,
     ) -> syn::Result<()> {
         if let NodeName::Path(path) = element.name() {
             if path
@@ -334,7 +351,7 @@ impl Generator {
                 .last()
                 .is_some_and(|segment| segment.ident.to_string().starts_with(char::is_uppercase))
             {
-                return self.component_element(element, path, namespace);
+                return self.component_element(element, path, namespace, depth);
             }
         }
         let name = literal_name(element.name())?;
@@ -345,7 +362,7 @@ impl Generator {
         ) {
             return Err(syn::Error::new_spanned(
                 element.name(),
-                "this element requires audited TrustedHtml in the initial API",
+                "this element requires audited TrustedHtml",
             ));
         }
         let namespace = match (namespace, name_lowercase.as_str()) {
@@ -389,8 +406,13 @@ impl Generator {
             self.attribute(attribute)?;
         }
         self.pending.push('>');
-        if matches!(name_lowercase.as_str(), "script" | "style") {
-            self.raw_content(&element.children, &name_lowercase, namespace)?;
+        let raw_element = match name_lowercase.as_str() {
+            "script" => Some(RawTextElement::Script),
+            "style" => Some(RawTextElement::Style),
+            _ => None,
+        };
+        if let Some(raw_element) = raw_element {
+            self.raw_content(&element.children, raw_element, namespace, depth)?;
         } else {
             let child_namespace = match (namespace, name_lowercase.as_str()) {
                 (MarkupContext::Svg, "foreignobject" | "desc" | "title") => MarkupContext::Html,
@@ -400,7 +422,7 @@ impl Generator {
                 (MarkupContext::MathMl, "annotation-xml") => annotation_context(element)?,
                 (namespace, _) => namespace,
             };
-            self.nodes(&element.children, child_namespace)?;
+            self.nodes(&element.children, child_namespace, depth)?;
         }
         if !is_void {
             self.pending.push_str("</");
@@ -413,20 +435,20 @@ impl Generator {
     fn raw_content(
         &mut self,
         nodes: &[Node],
-        element: &str,
+        element: RawTextElement,
         namespace: MarkupContext,
+        depth: u32,
     ) -> syn::Result<()> {
         self.flush();
         let body_outer = std::mem::take(&mut self.body);
-        self.raw_nodes(nodes, namespace)?;
+        self.raw_nodes(nodes, namespace, depth)?;
         self.flush();
         let body = std::mem::replace(&mut self.body, body_outer);
         let output = &self.output;
         let runtime = &self.runtime;
-        let element = if element == "script" {
-            quote! { #runtime::RawTextElement::Script }
-        } else {
-            quote! { #runtime::RawTextElement::Style }
+        let element = match element {
+            RawTextElement::Script => quote! { #runtime::RawTextElement::Script },
+            RawTextElement::Style => quote! { #runtime::RawTextElement::Style },
         };
         self.body.extend(quote! {
             #output.raw_text(#element, |#output| {
@@ -437,7 +459,18 @@ impl Generator {
         Ok(())
     }
 
-    fn raw_nodes(&mut self, nodes: &[Node], namespace: MarkupContext) -> syn::Result<()> {
+    fn raw_nodes(
+        &mut self,
+        nodes: &[Node],
+        namespace: MarkupContext,
+        depth: u32,
+    ) -> syn::Result<()> {
+        if depth > TEMPLATE_DEPTH_MAX {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "html! element nesting exceeds 64 levels",
+            ));
+        }
         for node in nodes {
             match node {
                 Node::Text(text) => {
@@ -452,7 +485,9 @@ impl Generator {
                         )?);
                     }
                 }
-                Node::Fragment(fragment) => self.raw_nodes(&fragment.children, namespace)?,
+                Node::Fragment(fragment) => {
+                    self.raw_nodes(&fragment.children, namespace, depth + 1)?
+                }
                 Node::Block(block) => {
                     let value = unblock(syn::parse2(block.to_token_stream())?);
                     self.flush();
@@ -508,7 +543,13 @@ impl Generator {
                     }
                 }
                 let name_lowercase = name.to_ascii_lowercase();
-                if name_lowercase == "style" || name_lowercase.starts_with("on") {
+                if name_lowercase == "style" {
+                    return Err(syn::Error::new_spanned(
+                        value,
+                        "dynamic style and native event-handler values are not supported",
+                    ));
+                }
+                if name_lowercase.starts_with("on") {
                     return Err(syn::Error::new_spanned(
                         value,
                         "dynamic style and native event-handler values are not supported",
@@ -539,9 +580,10 @@ fn annotation_context(element: &NodeElement<Infallible>) -> syn::Result<MarkupCo
                 if let Some(Expr::Lit(literal)) = attribute.value() {
                     if let Lit::Str(value) = &literal.lit {
                         let encoding = value.value();
-                        if encoding.eq_ignore_ascii_case("text/html")
-                            || encoding.eq_ignore_ascii_case("application/xhtml+xml")
-                        {
+                        if encoding.eq_ignore_ascii_case("text/html") {
+                            return Ok(MarkupContext::Html);
+                        }
+                        if encoding.eq_ignore_ascii_case("application/xhtml+xml") {
                             return Ok(MarkupContext::Html);
                         }
                         return Ok(MarkupContext::MathAnnotation);
