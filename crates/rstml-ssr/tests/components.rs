@@ -259,3 +259,47 @@ fn component_trees_obey_one_shared_byte_budget() {
         }
     }
 }
+
+#[component]
+fn Button(
+    label: &str,
+    #[prop(optional)] class: Option<&str>,
+    #[prop(optional)] disabled: bool,
+    #[prop(default = "button")] kind: &str,
+) -> RenderResult {
+    html! {
+        <button type=kind class=class disabled=disabled>
+            {label}
+        </button>
+    }
+}
+
+#[component]
+fn Badge(#[prop(default = "info")] tone: &str) -> RenderResult {
+    html! { <span data-tone=tone /> }
+}
+
+#[test]
+fn optional_and_default_properties_apply_defaults_lazily() {
+    let class = String::from("primary");
+    let page = html! {
+        <div>
+            <Button label="Save" />
+            <Button label="Submit" class={Some(class.as_str())} disabled kind="submit" />
+            <Badge />
+            <Badge tone="warn" />
+        </div>
+    }
+    .unwrap();
+    assert_eq!(
+        page.as_str(),
+        concat!(
+            "<div>",
+            "<button type=\"button\">Save</button>",
+            "<button type=\"submit\" class=\"primary\" disabled=\"\">Submit</button>",
+            "<span data-tone=\"info\"></span>",
+            "<span data-tone=\"warn\"></span>",
+            "</div>"
+        )
+    );
+}

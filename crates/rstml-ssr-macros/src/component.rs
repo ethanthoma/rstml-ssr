@@ -12,11 +12,19 @@ enum PropertyKind {
     Children,
 }
 
+enum PropertyRequirement {
+    Required,
+    Optional,
+    DefaultValue(Box<Expr>),
+}
+
 struct ComponentProperty {
     name: Ident,
     binding: PatIdent,
     property_type: Type,
     kind: PropertyKind,
+    requirement: PropertyRequirement,
+    state_index: Option<usize>,
 }
 
 #[derive(Clone, Copy)]
@@ -99,8 +107,13 @@ pub fn expand(input: Tokens) -> syn::Result<Tokens> {
         .iter()
         .map(|property| &property.property_type)
         .collect();
-    let state_names: Vec<Ident> = (0..properties.len())
-        .map(|index| format_ident!("__RstmlState{index}"))
+    let state_names: Vec<Ident> = properties
+        .iter()
+        .filter_map(|property| {
+            property
+                .state_index
+                .map(|index| format_ident!("__RstmlState{index}"))
+        })
         .collect();
     let states: Vec<Tokens> = state_names.iter().map(ToTokens::to_token_stream).collect();
     let mut builder_parameters = lifetime_parameters.clone();
@@ -112,14 +125,63 @@ pub fn expand(input: Tokens) -> syn::Result<Tokens> {
     let properties_generics = generics(&parameters);
     let properties_use = generics(&arguments);
     let mut initial_arguments = lifetime_arguments.clone();
-    initial_arguments.extend(properties.iter().map(|_| quote!(#runtime::__Missing)));
+    initial_arguments.extend(
+        properties
+            .iter()
+            .filter(|property| property.state_index.is_some())
+            .map(|_| quote!(#runtime::__Missing)),
+    );
     let initial_use = generics(&initial_arguments);
     let mut complete_arguments = lifetime_arguments.clone();
-    complete_arguments.extend(properties.iter().map(|property| {
-        let property_type = &property.property_type;
-        quote!(#runtime::__Set<#property_type>)
-    }));
+    complete_arguments.extend(
+        properties
+            .iter()
+            .filter(|property| property.state_index.is_some())
+            .map(|property| {
+                let property_type = &property.property_type;
+                quote!(#runtime::__Set<#property_type>)
+            }),
+    );
     let complete_use = generics(&complete_arguments);
+    let builder_fields: Vec<Tokens> = properties
+        .iter()
+        .map(|property| {
+            let field_name = &property.name;
+            if let Some(state_index) = property.state_index {
+                let state_name = &state_names[state_index];
+                quote!(#field_name: #state_name)
+            } else {
+                let property_type = &property.property_type;
+                quote!(#field_name: ::core::option::Option<#property_type>)
+            }
+        })
+        .collect();
+    let initial_fields: Vec<Tokens> = properties
+        .iter()
+        .map(|property| {
+            let field_name = &property.name;
+            if property.state_index.is_some() {
+                quote!(#field_name: #runtime::__Missing)
+            } else {
+                quote!(#field_name: ::core::option::Option::None)
+            }
+        })
+        .collect();
+    let built_fields: Vec<Tokens> = properties
+        .iter()
+        .map(|property| {
+            let field_name = &property.name;
+            match &property.requirement {
+                PropertyRequirement::Required => quote!(#field_name: self.#field_name.0),
+                PropertyRequirement::Optional => {
+                    quote!(#field_name: ::core::option::Option::unwrap_or_default(self.#field_name))
+                }
+                PropertyRequirement::DefaultValue(default_value) => {
+                    quote!(#field_name: ::core::option::Option::unwrap_or_else(self.#field_name, || (#default_value)))
+                }
+            }
+        })
+        .collect();
     let setters = generate_setters(
         &properties,
         &builder_name,
@@ -165,7 +227,7 @@ pub fn expand(input: Tokens) -> syn::Result<Tokens> {
         #(#configuration)*
         #[doc(hidden)]
         #visibility struct #builder_name #builder_generics {
-            #(#names: #state_names,)*
+            #(#builder_fields,)*
             __marker: ::core::marker::PhantomData<#marker>,
         }
         #(#configuration)*
@@ -173,13 +235,13 @@ pub fn expand(input: Tokens) -> syn::Result<Tokens> {
         #(#configuration)*
         impl #properties_generics #builder_name #complete_use #child_bound {
             pub fn build(self) -> #properties_name #properties_use {
-                #properties_name { #(#names: self.#names.0,)* __marker: ::core::marker::PhantomData }
+                #properties_name { #(#built_fields,)* __marker: ::core::marker::PhantomData }
             }
         }
         #(#configuration)*
         impl #name {
             pub fn builder #lifetime_generics() -> #builder_name #initial_use {
-                #builder_name { #(#names: #runtime::__Missing,)* __marker: ::core::marker::PhantomData }
+                #builder_name { #(#initial_fields,)* __marker: ::core::marker::PhantomData }
             }
             pub fn render #properties_generics(#output: &mut #runtime::Output, properties: #properties_name #properties_use) #return_type #child_bound {
                 let #properties_name { #(#bindings,)* __marker: _ } = properties;
@@ -245,12 +307,57 @@ fn validate_signature(signature: &Signature) -> syn::Result<()> {
     Ok(())
 }
 
+fn parse_property_requirement(attributes: &[syn::Attribute]) -> syn::Result<PropertyRequirement> {
+    let mut requirement = None;
+    for attribute in attributes {
+        if attribute.path().is_ident("doc") {
+            continue;
+        }
+        if !attribute.path().is_ident("prop") {
+            return Err(syn::Error::new_spanned(
+                attribute,
+                "property annotations only support #[prop(optional)] and #[prop(default = ...)]",
+            ));
+        }
+        if requirement.is_some() {
+            return Err(syn::Error::new_spanned(
+                attribute,
+                "duplicate #[prop(...)] annotation",
+            ));
+        }
+        let parsed = attribute.parse_args_with(|stream: syn::parse::ParseStream<'_>| {
+            let key: Ident = stream.parse()?;
+            if key == "optional" {
+                if !stream.is_empty() {
+                    return Err(stream.error("unexpected tokens after `optional`"));
+                }
+                return Ok(PropertyRequirement::Optional);
+            }
+            if key == "default" {
+                stream.parse::<syn::Token![=]>()?;
+                let expression: Expr = stream.parse()?;
+                if !stream.is_empty() {
+                    return Err(stream.error("unexpected tokens after default expression"));
+                }
+                return Ok(PropertyRequirement::DefaultValue(Box::new(expression)));
+            }
+            Err(syn::Error::new_spanned(
+                key,
+                "property annotations only support #[prop(optional)] and #[prop(default = ...)]",
+            ))
+        })?;
+        requirement = Some(parsed);
+    }
+    Ok(requirement.unwrap_or(PropertyRequirement::Required))
+}
+
 fn parse_properties(
     inputs: &syn::punctuated::Punctuated<FnArg, syn::Token![,]>,
     lifetimes: &mut Lifetimes,
 ) -> syn::Result<(Vec<ComponentProperty>, Option<Type>)> {
     let mut properties: Vec<ComponentProperty> = Vec::new();
     let mut children_annotation = None;
+    let mut required_count = 0_usize;
     for argument in inputs {
         let FnArg::Typed(argument) = argument else {
             return Err(syn::Error::new_spanned(
@@ -258,16 +365,7 @@ fn parse_properties(
                 "components cannot have a self receiver",
             ));
         };
-        if argument
-            .attrs
-            .iter()
-            .any(|attribute| !attribute.path().is_ident("doc"))
-        {
-            return Err(syn::Error::new_spanned(
-                argument,
-                "property annotations are not supported yet",
-            ));
-        }
+        let requirement = parse_property_requirement(&argument.attrs)?;
         let Pat::Ident(pattern) = argument.pat.as_ref() else {
             return Err(syn::Error::new_spanned(
                 &argument.pat,
@@ -323,6 +421,12 @@ fn parse_properties(
                     "the Children property must be named children",
                 ));
             }
+            if !matches!(requirement, PropertyRequirement::Required) {
+                return Err(syn::Error::new_spanned(
+                    pattern,
+                    "#[prop(...)] is not supported on Children",
+                ));
+            }
             children_annotation = Some(property_type.clone());
             property_type = parse_quote!(__RstmlChildren);
             PropertyKind::Children
@@ -330,11 +434,20 @@ fn parse_properties(
             lifetimes.visit_type_mut(&mut property_type);
             PropertyKind::Value
         };
+        let state_index = if matches!(requirement, PropertyRequirement::Required) {
+            let index = required_count;
+            required_count += 1;
+            Some(index)
+        } else {
+            None
+        };
         properties.push(ComponentProperty {
             name: pattern.ident.clone(),
             binding: pattern.clone(),
             property_type,
             kind,
+            requirement,
+            state_index,
         });
     }
     Ok((properties, children_annotation))
@@ -347,33 +460,49 @@ fn generate_setters(
     builder_arguments: &[Tokens],
     runtime: &Tokens,
 ) -> Vec<Tokens> {
+    let builder_use = generics(builder_arguments);
     properties
         .iter()
-        .enumerate()
-        .map(|(index, property)| {
+        .map(|property| {
             let field = &property.name;
             let property_type = &property.property_type;
-            let mut next = builder_arguments.to_vec();
-            let (value_type, method_generics) = match property.kind {
-                PropertyKind::Children => (
-                    quote!(__RstmlChildValue),
-                    quote!(<__RstmlChildValue: ::core::ops::FnOnce(&mut #runtime::Output) -> #runtime::RenderResult>),
-                ),
-                PropertyKind::Value => (quote!(#property_type), quote!()),
-            };
-            next[lifetime_arguments.len() + index] = quote!(#runtime::__Set<#value_type>);
-            let next = generics(&next);
-            let assignments = properties.iter().map(|other| {
-                let name = &other.name;
-                if name == field {
-                    quote!(#name: #runtime::__Set(value))
-                } else {
-                    quote!(#name: self.#name)
+            if let Some(state_index) = property.state_index {
+                let mut next = builder_arguments.to_vec();
+                let (value_type, method_generics) = match property.kind {
+                    PropertyKind::Children => (
+                        quote!(__RstmlChildValue),
+                        quote!(<__RstmlChildValue: ::core::ops::FnOnce(&mut #runtime::Output) -> #runtime::RenderResult>),
+                    ),
+                    PropertyKind::Value => (quote!(#property_type), quote!()),
+                };
+                next[lifetime_arguments.len() + state_index] = quote!(#runtime::__Set<#value_type>);
+                let next = generics(&next);
+                let assignments = properties.iter().map(|other| {
+                    let name = &other.name;
+                    if name == field {
+                        quote!(#name: #runtime::__Set(value))
+                    } else {
+                        quote!(#name: self.#name)
+                    }
+                });
+                quote! {
+                    pub fn #field #method_generics(self, value: #value_type) -> #builder_name #next {
+                        #builder_name { #(#assignments,)* __marker: ::core::marker::PhantomData }
+                    }
                 }
-            });
-            quote! {
-                pub fn #field #method_generics(self, value: #value_type) -> #builder_name #next {
-                    #builder_name { #(#assignments,)* __marker: ::core::marker::PhantomData }
+            } else {
+                let assignments = properties.iter().map(|other| {
+                    let name = &other.name;
+                    if name == field {
+                        quote!(#name: ::core::option::Option::Some(value))
+                    } else {
+                        quote!(#name: self.#name)
+                    }
+                });
+                quote! {
+                    pub fn #field(self, value: #property_type) -> #builder_name #builder_use {
+                        #builder_name { #(#assignments,)* __marker: ::core::marker::PhantomData }
+                    }
                 }
             }
         })

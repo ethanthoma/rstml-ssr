@@ -144,4 +144,23 @@ fn unsized_values_render_without_extra_references() {
         render(&page).unwrap().as_str(),
         " title=\"&lt;&amp;&gt;\" data-value=\"value\""
     );
+
+    let cow_borrowed: std::borrow::Cow<'_, str> = std::borrow::Cow::Borrowed("<cow>");
+    let cow_owned: std::borrow::Cow<'_, str> = std::borrow::Cow::Owned(String::from("owned&"));
+    let boxed: Box<str> = Box::from("box<");
+    let shared: std::sync::Arc<str> = std::sync::Arc::from("arc>");
+    let count = std::num::NonZeroU32::new(7).unwrap();
+    let signed = std::num::NonZeroI64::new(-3).unwrap();
+    let wrapped = component(|output| {
+        output.attribute("data-cow", &cow_borrowed)?;
+        output.attribute("data-box", &boxed)?;
+        output.attribute("data-arc", &shared)?;
+        output.attribute("data-count", &count)?;
+        cow_owned.render(output)?;
+        signed.render(output)
+    });
+    assert_eq!(
+        render(&wrapped).unwrap().as_str(),
+        " data-cow=\"&lt;cow&gt;\" data-box=\"box&lt;\" data-arc=\"arc&gt;\" data-count=\"7\"owned&amp;-3"
+    );
 }

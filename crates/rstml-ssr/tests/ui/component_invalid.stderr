@@ -10,14 +10,20 @@ error: component type and const generics are not supported yet
 7 | fn Generic<T>(value: T) -> rstml_ssr::RenderResult { let _ = value; Ok(()) }
   |            ^
 
-error: property annotations are not supported yet
-  --> tests/ui/component_invalid.rs:10:13
+error: property annotations only support #[prop(optional)] and #[prop(default = ...)]
+  --> tests/ui/component_invalid.rs:10:29
    |
-10 | fn Optional(#[prop(optional)] value: Option<String>) -> rstml_ssr::RenderResult { let _ = value; Ok(()) }
-   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+10 | fn InvalidAnnotation(#[prop(unknown)] value: Option<String>) -> rstml_ssr::RenderResult { let _ = value; Ok(()) }
+   |                             ^^^^^^^
+
+error: #[prop(...)] is not supported on Children
+  --> tests/ui/component_invalid.rs:13:39
+   |
+13 | fn OptionalChildren(#[prop(optional)] children: rstml_ssr::Children) -> rstml_ssr::RenderResult { let _ = children; Ok(()) }
+   |                                       ^^^^^^^^
 
 error: duplicate or reserved component property name
-  --> tests/ui/component_invalid.rs:13:13
+  --> tests/ui/component_invalid.rs:16:13
    |
-13 | fn Reserved(build: bool) -> rstml_ssr::RenderResult { let _ = build; Ok(()) }
+16 | fn Reserved(build: bool) -> rstml_ssr::RenderResult { let _ = build; Ok(()) }
    |             ^^^^^

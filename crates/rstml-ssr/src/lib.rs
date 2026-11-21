@@ -18,10 +18,11 @@ extern crate self as rstml_ssr;
 
 /// Declare a writer component with named, type-checked properties.
 /// Inside the component, `html!` writes into the caller's rendering scope.
-/// Required concrete properties, lifetime parameters, and `children: Children`
-/// are supported. Type/const generics and property annotations are not supported.
-/// Declarations accept 16 properties and 64 borrowed lifetimes. Property names
-/// starting with `__`, and `build`, are reserved for generated implementation.
+/// Required concrete properties, `#[prop(optional)]`, `#[prop(default = ...)]`,
+/// lifetime parameters, and `children: Children` are supported. Type/const
+/// generics are not supported. Declarations accept 16 properties and 64
+/// borrowed lifetimes. Property names starting with `__`, and `build`, are
+/// reserved for generated implementation.
 ///
 /// ```
 /// use rstml_ssr::{component, html, RenderResult};
@@ -361,6 +362,24 @@ impl<T: Render + ?Sized> Render for &T {
     }
 }
 
+impl<B: Render + ToOwned + ?Sized> Render for std::borrow::Cow<'_, B> {
+    fn render(&self, output: &mut Output) -> RenderResult {
+        self.as_ref().render(output)
+    }
+}
+
+impl<T: Render + ?Sized> Render for Box<T> {
+    fn render(&self, output: &mut Output) -> RenderResult {
+        (**self).render(output)
+    }
+}
+
+impl<T: Render + ?Sized> Render for std::sync::Arc<T> {
+    fn render(&self, output: &mut Output) -> RenderResult {
+        (**self).render(output)
+    }
+}
+
 impl Render for () {
     fn render(&self, _output: &mut Output) -> RenderResult {
         Ok(())
@@ -512,6 +531,33 @@ impl<T: Attribute + ?Sized> Attribute for &T {
     }
 }
 
+impl<B: Attribute + ToOwned + ?Sized> Attribute for std::borrow::Cow<'_, B> {
+    fn present(&self) -> bool {
+        self.as_ref().present()
+    }
+    fn render_attribute(&self, output: &mut Output) -> RenderResult {
+        self.as_ref().render_attribute(output)
+    }
+}
+
+impl<T: Attribute + ?Sized> Attribute for Box<T> {
+    fn present(&self) -> bool {
+        (**self).present()
+    }
+    fn render_attribute(&self, output: &mut Output) -> RenderResult {
+        (**self).render_attribute(output)
+    }
+}
+
+impl<T: Attribute + ?Sized> Attribute for std::sync::Arc<T> {
+    fn present(&self) -> bool {
+        (**self).present()
+    }
+    fn render_attribute(&self, output: &mut Output) -> RenderResult {
+        (**self).render_attribute(output)
+    }
+}
+
 impl<T: Attribute> Attribute for Option<T> {
     fn present(&self) -> bool {
         self.as_ref().is_some_and(Attribute::present)
@@ -576,7 +622,32 @@ macro_rules! numbers {
 }
 
 numbers!(
-    u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64
+    u8,
+    u16,
+    u32,
+    u64,
+    u128,
+    usize,
+    i8,
+    i16,
+    i32,
+    i64,
+    i128,
+    isize,
+    f32,
+    f64,
+    std::num::NonZeroU8,
+    std::num::NonZeroU16,
+    std::num::NonZeroU32,
+    std::num::NonZeroU64,
+    std::num::NonZeroU128,
+    std::num::NonZeroUsize,
+    std::num::NonZeroI8,
+    std::num::NonZeroI16,
+    std::num::NonZeroI32,
+    std::num::NonZeroI64,
+    std::num::NonZeroI128,
+    std::num::NonZeroIsize,
 );
 
 #[cfg(test)]

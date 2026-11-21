@@ -8,6 +8,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- Support `#[prop(optional)]` and `#[prop(default = ...)]` on `#[component]`
+  properties.
+- Implement `Render` and `Attribute` for `Cow<'_, B>`, `Box<T>`, `Arc<T>`, and
+  `NonZero*` integers.
+
 ### Changed
 
 - Enforce a 64-level element nesting depth limit in `html!` and `#[component]`.

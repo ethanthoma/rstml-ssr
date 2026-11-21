@@ -53,10 +53,10 @@ Properties use Rust's move and borrowing rules. `Children` becomes an unboxed
 `FnOnce` writer. Children execute when called, not when supplied. Missing,
 unknown, or mistyped properties fail at compile time.
 
-Required concrete properties and lifetime parameters are supported. Type/const
-generics and `#[prop(...)]` annotations are not yet supported. PascalCase tags
-are components, lowercase tags are HTML. Keep SVG/MathML roots inside
-components, without children slots inside those roots.
+Required concrete properties, `#[prop(optional)]`, `#[prop(default = ...)]`, and
+lifetime parameters are supported. Type/const generics are not yet supported.
+PascalCase tags are components, lowercase tags are HTML. Keep SVG/MathML roots
+inside components, without children slots inside those roots.
 
 ## Safety
 
